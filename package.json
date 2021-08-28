@@ -1,0 +1,15 @@
+{
+  "name": "svelte-to-vue",
+  "version": "1.0.0",
+  "description": "Convert Svelte code to Vue",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "svelte",
+    "vue"
+  ],
+  "author": "JackC90 <jckynchua@yahoo.com>",
+  "license": "ISC"
+}
