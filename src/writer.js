@@ -35,6 +35,60 @@ function parseFunction(line) {
   }
 }
 
+function getDataType(value) {
+  let dataType;
+  if (value.match(/^["']|["']$/)) {
+    dataType = "String";
+  } else if (!isNaN(value)) {
+    dataType = "Number";
+  } else if (value.match(/^\[|\]$/)) {
+    dataType = "Array";
+  } else if (value.match(/^\{|\}$/)) {
+    dataType = "Object";
+  } else if (value === "null") {
+  }
+  return dataType;
+}
+
+function parseProp(line) {
+  try {
+    if (typeof line === "string") {
+      const prms = line.match(/^export let (.+) = (.+);/);
+      const name = get(prms, "[1]");
+      const defaultValue = get(prms, "[2]");
+      return {
+        name,
+        defaultValue,
+        dataType: getDataType(defaultValue),
+      };
+    }
+  } catch (e) {
+    return null;
+  }
+}
+
+function parseData(line) {
+  try {
+    if (typeof line === "string") {
+      let prms;
+      if (line.includes("let ")) {
+        prms = line.match(/^let (.+) = (.+);/);
+      } else if (line.includes("$: ")) {
+        prms = line.match(/^\$: (.+) = (.+);/);
+      }
+      const name = get(prms, "[1]");
+      const defaultValue = get(prms, "[2]");
+      return {
+        name,
+        defaultValue,
+        dataType: getDataType(defaultValue),
+      };
+    }
+  } catch (e) {
+    return null;
+  }
+}
+
 export function writeScript(schema) {
   if (
     get(schema, "type") === "svelteScript" &&
@@ -64,18 +118,33 @@ export function writeScript(schema) {
       let mLType = null;
       let isLineEnd = true;
 
+      function startLine(_mLType, _line) {
+        isLineEnd = false;
+        mLType = _mLType;
+        multiline += ` ${_line}`;
+      }
+
+      function endLine(_line) {
+        multiline += ` ${_line}`;
+        multiline = multiline.trim();
+        isLineEnd = true;
+      }
+
+      function resetLine() {
+        multiline = "";
+        mLType = null;
+        isLineEnd = true;
+      }
+
       // Imports
       if (c.match(/^import/) || mLType === "import") {
         // Multi-line
         // - Set multi-line
         if (!c.match(/;$/)) {
-          isLineEnd = false;
-          mLType = "import";
-          multiline += c;
+          startLine("import", c);
         } else {
           // - End line
-          multiline += c;
-          isLineEnd = true;
+          endLine(c);
         }
 
         // Complete line
@@ -87,21 +156,64 @@ export function writeScript(schema) {
             let params = parseImport(line);
             importVars.push(params);
           }
-          multiline = "";
+          resetLine();
         }
+        continue;
       }
 
+      // Props
+      if (c.match(/export let/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!c.match(/;$/) && !parseFunction(multiline || c)) {
+          startLine("prop", c);
+        } else {
+          // - End line
+          endLine(c);
+        }
+
+        if (isLineEnd) {
+          line = multiline || c;
+          const p = parseProp(line);
+          if (p) {
+            props.push(p);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Data
+      if (c.match(/let /) || c.match(/\$: (.+) =/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!c.match(/;$/) && !parseFunction(multiline || c)) {
+          startLine("data", c);
+        } else {
+          // - End line
+          endLine(c);
+        }
+
+        if (isLineEnd) {
+          line = multiline || c;
+          const p = parseData(line);
+          if (p) {
+            data.push(p);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Method
       if (c.match(/=>/) || c.match(/function/)) {
         // Multi-line
         // - Set multi-line
         if (!c.match(/;$/) && !parseFunction(multiline || c)) {
-          isLineEnd = false;
-          mLType = "function";
-          multiline += c;
+          startLine("method", c);
         } else {
           // - End line
-          multiline += c;
-          isLineEnd = true;
+          endLine(c);
         }
 
         if (isLineEnd) {
@@ -110,8 +222,9 @@ export function writeScript(schema) {
           if (f) {
             methods.push(f);
           }
-          multiline = "";
+          resetLine();
         }
+        continue;
       }
     }
   }
