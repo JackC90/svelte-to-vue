@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 const __dirname = path.resolve();
 
-const fileUrl = __dirname + "/src/EditUser.svelte"; // provide file location
+const fileUrl = __dirname + "/src/Carousel.svelte"; // provide file location
 
 export const parseFile = (filename, options) => {
   fs.readFile(filename, "utf8", function (err, data) {
@@ -18,7 +18,7 @@ export const parseFile = (filename, options) => {
     const fn = filename.split(".svelte")[0];
     const content = writeToVue(fn, result);
 
-    fs.writeFile(`${fn}.vue`, content, err => {
+    fs.writeFile(`${fn}.vue`, content, (err) => {
       if (err) throw err;
 
       console.log("The file has been saved!");
