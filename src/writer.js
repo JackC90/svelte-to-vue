@@ -9,7 +9,7 @@ import {
   parseData,
 } from "./utils.js";
 
-export function writeScript(schema) {
+export function parseScript(schema) {
   if (
     get(schema, "type") === "svelteScript" &&
     get(schema, "tagName") === "script"
@@ -194,19 +194,30 @@ export function writeScript(schema) {
   }
 }
 
+function writeElement(el, initialString) {
+  const { type, tagName, properties, selfClosing, children } = el;
+  if (type === "svelteElement") {
+    initialString += `<${tagName}${selfClosing ? " " : ">"}`;
+  }
+}
+
 export function writeToVue(name, schema) {
   if (get(schema, "type") === "root") {
     const children = get(schema, "children");
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i];
-
-      // Handle <script>
-      if (
+    const scripts = children.find((child) => {
+      return (
         get(child, "type") === "svelteScript" &&
         get(child, "tagName") === "script"
-      ) {
-        writeScript(child);
-      }
+      );
+    });
+    const parsedScripts = parseScript(scripts);
+
+    const elements = children.filter((child) => {
+      return get(child, "type") === "svelteElement";
+    });
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
     }
   }
 }

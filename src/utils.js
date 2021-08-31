@@ -117,3 +117,51 @@ export function parseData(line) {
     return null;
   }
 }
+
+// Elements
+function printProperties(properties) {
+  let str = "";
+  if (Array.isArray(properties) && properties.length) {
+    const types = ["svelteProperty", "svelteDirective"];
+    for (let i = 0; i < properties.length; i++) {
+      const property = properties[i];
+      const { type, name, value, specifier } = property;
+      if (types.includes(type)) {
+        if (name) {
+          // Name
+          const isDynamic = get(value, "[0].expression");
+          if (type === "svelteDirective") {
+            str += ` @${specifier}="`;
+          } else {
+            str += ` ${isDynamic ? ":" : ""}${name}="`;
+          }
+          // Value
+          value.forEach(({ type, value, expression }) => {
+            if (type === "text") {
+              str += value;
+            }
+            if (type === "svelteDynamicContent") {
+              str += expression.value;
+            }
+          });
+          str += `"`;
+        }
+      }
+    }
+  }
+  return str;
+}
+
+function printSvEl(el, initialString) {
+  let initString = initialString;
+  const { type, tagName, properties, selfClosing, children } = el;
+  if (type === "svelteElement") {
+    initString += `<${tagName}${selfClosing ? " " : ">"}`;
+    initString += printProperties(properties);
+    initString += selfClosing ? ` />` : `</${tagName}>`;
+  }
+
+  if (type === "svelteBranchingBlock" && name === "each") {
+    const branches = property.branches;
+  }
+}
