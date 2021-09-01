@@ -7,6 +7,7 @@ import {
   getDataType,
   parseProp,
   parseData,
+  printSvEl,
 } from "./utils.js";
 
 export function parseScript(schema) {
@@ -29,7 +30,6 @@ export function parseScript(schema) {
       .split("\n")
       .map((c) => c.trim())
       .filter((c) => c);
-    console.log(cs);
     // Multi-line code
     let multiline = "";
     let mLType = null;
@@ -194,16 +194,12 @@ export function parseScript(schema) {
   }
 }
 
-function writeElement(el, initialString) {
-  const { type, tagName, properties, selfClosing, children } = el;
-  if (type === "svelteElement") {
-    initialString += `<${tagName}${selfClosing ? " " : ">"}`;
-  }
-}
-
 export function writeToVue(name, schema) {
   if (get(schema, "type") === "root") {
     const children = get(schema, "children");
+
+    // Scripts
+    let scriptStr = "";
     const scripts = children.find((child) => {
       return (
         get(child, "type") === "svelteScript" &&
@@ -213,11 +209,25 @@ export function writeToVue(name, schema) {
     const parsedScripts = parseScript(scripts);
 
     const elements = children.filter((child) => {
-      return get(child, "type") === "svelteElement";
+      return !(
+        get(child, "type") === "svelteScript" ||
+        get(child, "tagName") === "script"
+      );
     });
 
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
+    let templateStr = "";
+    if (elements.length) {
+      let str = "<template>\n";
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        str += printSvEl(el);
+      }
+      str += "\n<template>";
+      templateStr = str;
     }
+
+    let fileStr = `${templateStr}\n${scriptStr}`;
+    return fileStr;
   }
+  return "";
 }

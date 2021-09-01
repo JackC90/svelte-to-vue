@@ -141,7 +141,7 @@ function printProperties(properties) {
               str += value;
             }
             if (type === "svelteDynamicContent") {
-              str += expression.value;
+              str += get(expression, "value");
             }
           });
           str += `"`;
@@ -152,16 +152,121 @@ function printProperties(properties) {
   return str;
 }
 
-function printSvEl(el, initialString) {
-  let initString = initialString;
-  const { type, tagName, properties, selfClosing, children } = el;
-  if (type === "svelteElement") {
-    initString += `<${tagName}${selfClosing ? " " : ">"}`;
-    initString += printProperties(properties);
-    initString += selfClosing ? ` />` : `</${tagName}>`;
+const ifBlocks = {
+  if: "if",
+  "else if": "else-if",
+  else: "else",
+};
+const ifBlockNames = Object.keys(ifBlocks);
+
+const parseEachExp = (eachExp) => {
+  if (typeof eachExp === "string") {
+    let key;
+    let exp = "";
+    let vars = [];
+    const matches = eachExp.trim().match(/^(.+) as (.+)$/);
+    const collection = get(matches, "[1]");
+    const item = get(matches, "[2]");
+    if (!item) {
+      return null;
+    }
+    item.split(",").forEach((w) => {
+      const wt = w.trim();
+      if (wt) {
+        // Value in brackets are keys
+        const k = wt.match(/^\((.+)\)$/);
+        if (k) {
+          key = get(k, "[1]");
+        } else {
+          vars.push(wt);
+        }
+      }
+    });
+    const varsStr = vars.length > 1 ? `(${vars.join(", ")})` : get(vars, "[0]");
+    exp = `${varsStr} in ${collection}`;
+    return {
+      exp,
+      key,
+    };
+  }
+  return null;
+};
+
+export function printSvEl(el, initialString) {
+  let initString = initialString || "";
+  let str = initString ? initString : "";
+  const {
+    type,
+    tagName,
+    name,
+    properties,
+    selfClosing,
+    children,
+    branches,
+    expression,
+    value,
+  } = el;
+  if (type === "text") {
+    str += value || "";
+  } else if (type === "comment") {
+    str += `// ${value}`;
+  } else if (type === "svelteDynamicContent") {
+    str += `{{ ${get(expression, "value")} }}`;
+  } else if (type === "svelteElement" || type === "svelteComponent") {
+    str += `<${tagName}`;
+    str += printProperties(properties);
+    str += selfClosing ? ` />` : `>`;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      str += printSvEl(child);
+    }
+    if (!selfClosing) {
+      str += `</${tagName}>`;
+    }
+  } else if (type === "svelteBranchingBlock") {
+    if (ifBlockNames.includes(name)) {
+      if (get(branches, "length")) {
+        for (let i = 0; i < branches.length; i++) {
+          const branch = branches[i];
+          const {
+            expression: brExpression,
+            children: brChildren,
+            name: brName,
+          } = branch;
+          const repPropName = ifBlocks[brName];
+          const brExprVal = get(brExpression, "value");
+          str += `<template v-${repPropName}${
+            brExprVal ? `="${brExprVal}"` : ""
+          }>`;
+          if (get(brChildren, "length")) {
+            brChildren.forEach((ch) => {
+              str += printSvEl(ch);
+            });
+          }
+          str += `</template>`;
+        }
+      }
+    } else if (name === "each") {
+      if (get(branches, "length")) {
+        for (let i = 0; i < branches.length; i++) {
+          const branch = branches[i];
+          const { expression: brExpression, children: brChildren } = branch;
+          const exp = parseEachExp(get(brExpression, "value"));
+          const key = get(exp, "key");
+          str += `<template v-for="${get(exp, "exp", "")}" ${
+            key ? `:key="${key}"` : ""
+          }>`;
+          if (get(brChildren, "length")) {
+            brChildren.forEach((ch) => {
+              str += printSvEl(ch);
+            });
+          }
+          str += `</template>`;
+        }
+      }
+    }
   }
 
-  if (type === "svelteBranchingBlock" && name === "each") {
-    const branches = property.branches;
-  }
+  initString += str;
+  return initString;
 }
