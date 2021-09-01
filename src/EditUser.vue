@@ -37,13 +37,13 @@
       </div>
     </template><template v-else-if="isLoggedIn && userData && userData.id === id && initialValues">
       <div class="my-20px">
-        <Form :schema="schema" @submit="submit" @isSubmitting="" @isValid="" @isDisabledBtn="" :initialValues="initialValues">
+        <Form :schema="schema" @submit="submit" :initialValues="initialValues" #default="{ isSubmitting, isValid, isDisabledBtn }">
           <div class="body-3 text-fade-gray">
             {{ $_('user.personalinformation') }}
           </div>
           <hr class="border-b border-fade-gray my-5px" />
-          <template v-for="item (item.name) in items" >
-            <FormInput :...item="...item" layout="inline" :classInputWrapper="'text-white body-3 mb-10px'" :classLabel="'text-fade-gray mr-20px body-4'" :initialValue="get(initialValues, item.name)" :disabled="item.disabled != null ? item.disabled : isSubmitting || isDemo || isLoading">
+          <template v-for="item in items" :key="item.name">
+            <FormInput v-bind="item" layout="inline" :classInputWrapper="'text-white body-3 mb-10px'" :classLabel="'text-fade-gray mr-20px body-4'" :initialValue="get(initialValues, item.name)" :disabled="item.disabled != null ? item.disabled : isSubmitting || isDemo || isLoading">
               <div slot="action" :class="`${item.name === 'password' ? 'btn absolute top-0 right-0 w-full h-full text-white text-right text-sm' : ''}`" @click="() => {
                   if (item.name === 'password') {
                     toggleResetPwd(true);

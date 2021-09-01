@@ -123,30 +123,60 @@ function printProperties(properties) {
   let str = "";
   if (Array.isArray(properties) && properties.length) {
     const types = ["svelteProperty", "svelteDirective"];
+    const slotVars = [];
+    let slotName;
+
     for (let i = 0; i < properties.length; i++) {
       const property = properties[i];
-      const { type, name, value, specifier } = property;
+      const { type, name, value, specifier, shorthand } = property;
+
       if (types.includes(type)) {
         if (name) {
           // Name
           const isDynamic = get(value, "[0].expression");
           if (type === "svelteDirective") {
-            str += ` @${specifier}="`;
+            if (name === "on") {
+              str += ` @${specifier}`;
+            } else if (name === "let") {
+              slotVars.push(specifier);
+            } else {
+              str += ` :${specifier}`;
+            }
+          } else if (shorthand === "expression" && name.match(/^\.\.\.(.+)$/)) {
+            // Destructuring
+            str += ` v-bind`;
           } else {
-            str += ` ${isDynamic ? ":" : ""}${name}="`;
+            str += ` ${isDynamic ? ":" : ""}${name}`;
+          }
+          // Slot
+          if (type === "svelteProperty" && name === "slot") {
+            slotName = get(value, "value");
           }
           // Value
+          let valStr = "";
           value.forEach(({ type, value, expression }) => {
             if (type === "text") {
-              str += value;
+              valStr += value;
             }
             if (type === "svelteDynamicContent") {
-              str += get(expression, "value");
+              let val = get(expression, "value");
+              // Destructuring shorthand
+              if (shorthand === "expression") {
+                const matches = val.match(/^\.\.\.(.+)$/);
+                const destruct = get(matches, "[1]");
+                val = destruct ? destruct : val;
+              }
+              valStr += val;
             }
           });
-          str += `"`;
+          str += valStr ? `="${valStr}"` : ``;
         }
       }
+    }
+    // Handle slots
+    if (slotVars.length) {
+      const sn = slotName ? slotName : "default";
+      str += ` #${sn}="{ ${slotVars.join(", ")} }"`;
     }
   }
   return str;
@@ -170,7 +200,7 @@ const parseEachExp = (eachExp) => {
     if (!item) {
       return null;
     }
-    item.split(",").forEach((w) => {
+    item.split(/[, ]/).forEach((w) => {
       const wt = w.trim();
       if (wt) {
         // Value in brackets are keys
