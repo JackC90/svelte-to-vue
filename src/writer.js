@@ -1,6 +1,6 @@
 import get from "lodash.get";
-import camelCase from "lodash.camelcase";
-import { printSvEl, parseScript } from "./utils.js";
+import { printSvEl } from "./utils/elements.js";
+import { parseScript } from "./utils/elements.js";
 
 export function writeToVue(name, schema) {
   if (get(schema, "type") === "root") {
