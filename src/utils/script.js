@@ -27,10 +27,10 @@ export function checkBrackets(expr) {
 
 // Hooks
 export const HOOKS = {
-  onMount: "mounted",
-  beforeUpdate: "beforeUpdate",
-  afterUpdate: "updated",
-  onDestroy: "destroyed",
+  onMount: "onMounted",
+  beforeUpdate: "onBeforeUpdate",
+  afterUpdate: "onUpdated",
+  onDestroy: "onUnmounted",
 };
 // Hooks
 const hookKeys = Object.keys(HOOKS);
@@ -373,18 +373,82 @@ export function parseScript(schema) {
   return null;
 }
 
+function replaceStates(content, states) {
+  if (content && typeof content === "string") {
+    let newStr = content;
+    const keys = Object.keys(states);
+    for (let i = 0; i < keys.length; i++) {
+      const stateKey = keys[i];
+      const stateParams = states[stateKey];
+      for (let j = 0; j < stateParams.length; j++) {
+        const { block, name, dataType } = stateParams[j];
+        if (block === "prop" || block === "data") {
+          const reg = new RegExp(`\\b${name}\\b`, "g");
+          newStr = newStr.replace(reg, `${name}.value`);
+
+          // Replace shorthand property assignment
+          const nmVal = `${name}.value`;
+          // Semi-colon object property assignment
+          const clReg = new RegExp(`(\\b(${nmVal})(?=:))`, "g");
+          newStr = newStr.replace(clReg, `${name}`);
+          // Short-hand property assignment
+          const shReg = new RegExp(
+            `((?<=([\{,][\\n\\r\\s]*))(${nmVal})(?=([\\n\\r\\s]*[\},])))`,
+            "g"
+          );
+          newStr = newStr.replace(shReg, `${name}: ${name}.value`);
+        }
+      }
+    }
+    return newStr;
+  }
+  return "";
+}
+
+function getFunction(blockParams, states) {
+  if (blockParams) {
+    const { block, hookKey, hookVal, script, name, def } = blockParams;
+    if (block === "hook") {
+      let str = script.replace(hookKey, hookVal);
+      str = replaceStates(str, states);
+      return str;
+    } else {
+      let str = replaceStates(script, states);
+      return str;
+    }
+  }
+  return "";
+}
+
+const returnBlockTypes = ["prop", "data", "method"];
+
+function getReturnVals(blocks) {
+  if (get(blocks, "length")) {
+    const returnVals = blocks
+      .filter(bl => {
+        return returnBlockTypes.includes(bl.block);
+      })
+      .map(bl => {
+        return bl.name;
+      })
+      .join(", ");
+    return `return { ${returnVals} }`;
+  }
+  return "return {}";
+}
+
 export function printScript(parsed) {
   let scrStr = "";
-  let impCmpApi = "";
   // Script tags
-  impCmpApi += "\n<script>\n";
+  scrStr += "\n<script>\n";
   // Import composition API
-  impCmpApi += `import { defineComponent, ref, reactive } from '@nuxtjs/composition-api';\n`;
+  scrStr += `import { defineComponent, ref, reactive, toRef } from '@nuxtjs/composition-api';\n`;
 
   // Imports
   let imports = [];
   let otherScripts = [];
   let props = [];
+  let data = [];
 
   parsed.forEach(p => {
     if (p.block === "import") {
@@ -392,40 +456,53 @@ export function printScript(parsed) {
     } else if (p.block === "prop") {
       props.push(p);
     } else {
+      if (p.block === "data") {
+        data.push(p);
+      }
       otherScripts.push(p);
     }
   });
   imports.forEach(i => {
-    impCmpApi += `${i.script.trim()}\n`;
+    scrStr += `${i.script.trim()}\n`;
   });
 
-  impCmpApi += `\nexport default defineComponent({\n
+  // Setup ----- Start
+  scrStr += `export default defineComponent({\n
   setup(${props.length ? "props" : ""}) {\n`;
 
   const sp = "    ";
 
   let bodyScr = "";
+
   bodyScr += props.length
-    ? `${sp}const { ${props.map(p => p.name).join(", ")} } = reactive(props);\n`
+    ? `${sp}const { ${props.map(p => p.name).join(", ")} } = toRefs(props);\n`
     : "";
   if (parsed) {
+    // State changes (refs)
+    const states = { props, data };
+
     for (let i = 0; i < otherScripts.length; i++) {
       const el = otherScripts[i];
       if (el.block === "data") {
         const { name, defaultValue, dataType } = el;
-        const ref = defaultValue.trim().match(/^(\[|\{)/) ? "reactive" : "ref";
+        const ref =
+          dataType === "Object" || dataType === "Array" ? "ref" : "ref";
         bodyScr += `${sp}const ${name}${
           defaultValue
             ? ` = ${ref}${ref ? "(" : ""}${defaultValue}${ref ? ")" : ""}`
             : ""
         };\n`;
-      } else if (el.block === "prop") {
+      } else if (el.block === "method" || el.block === "hook") {
+        bodyScr += `\n${sp}${getFunction(el, states)}\n`;
       }
     }
   }
+  bodyScr += getReturnVals(parsed);
 
-  impCmpApi += `${bodyScr}\n  }\n`;
-  impCmpApi += `});\n`;
-  impCmpApi += "</script>";
-  return impCmpApi;
+  scrStr += `${bodyScr}\n  }\n`;
+  // Setup ----- End
+
+  scrStr += `});\n`;
+  scrStr += "</script>";
+  return scrStr;
 }
