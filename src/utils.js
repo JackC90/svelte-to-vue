@@ -25,14 +25,41 @@ export function checkBrackets(expr) {
   return holder.length === 0; // return true if length is 0, otherwise false
 }
 
+export const HOOKS = {
+  onMount: "mounted",
+  beforeUpdate: "beforeUpdate",
+  afterUpdate: "updated",
+  onDestroy: "destroyed",
+};
+
 export function parseImport(line) {
   if (typeof line === "string") {
-    const sngLn = line.replace("\n", "");
-    let vars = get(sngLn.match(/^import (.+) from/), "[1]");
-    vars = vars
-      .split(",")
-      .map((c) => c.replace(/\{/g, "").replace(/\}/g, "").trim())
-      .filter((c) => c);
+    const lineTr = line.trim();
+    const type = lineTr.includes(".svelte") ? "svelteComponent" : "library";
+    const sngLn = lineTr.replace("\n", "");
+    let varsParsed = get(sngLn.match(/^import (.+) from/), "[1]");
+
+    let isChild = false;
+    let defaultVars = [];
+    let vars = [];
+    varsParsed.split(",").forEach(c => {
+      if (c) {
+        if (c.includes("{")) {
+          isChild = true;
+        }
+
+        const clean = c.replace(/\{/g, "").replace(/\}/g, "").trim();
+        if (isChild) {
+          vars.push(clean);
+        } else {
+          defaultVars.push(clean);
+        }
+
+        if (c.includes("}")) {
+          isChild = false;
+        }
+      }
+    });
 
     let lib = get(sngLn.match(/ from ["'](.+)["'];$/), "[1]");
     let category = get(lib.match("^@[a-zA-Z0-9]*"), "[0]");
@@ -43,7 +70,9 @@ export function parseImport(line) {
     return {
       vars,
       lib,
+      type,
       category,
+      script: line,
     };
   }
   return null;
@@ -52,8 +81,45 @@ export function parseImport(line) {
 export function parseFunction(line) {
   try {
     if (typeof line === "string") {
-      const f = Function(line);
-      return f ? line : null;
+      const lineTr = line.trim();
+      const f = Function(lineTr);
+      if (f) {
+        let p = lineTr.match(/^(const|let) (.+) = /);
+        p = p || lineTr.match(/^(function|async function) (.+)\(/);
+        const name = get(p, `[2]`);
+
+        // Definition - Async? Arrow function with let / const?
+        const def = get(p, `[1]`);
+        return {
+          name,
+          def,
+          script: line,
+        };
+      }
+    }
+  } catch (e) {
+    return null;
+  }
+}
+
+export function parseHook(line) {
+  try {
+    if (typeof line === "string") {
+      const lineTr = line.trim();
+      const f = Function(lineTr);
+      if (f) {
+        let p = lineTr.match(/^(const|let) (.+) = /);
+        p = p || lineTr.match(/^(function|async function) (.+)\(/);
+        const name = get(p, `[2]`);
+
+        // Definition - Async? Arrow function with let / const?
+        const def = get(p, `[1]`);
+        return {
+          name,
+          def,
+          script: line,
+        };
+      }
     }
   } catch (e) {
     return null;
@@ -80,7 +146,8 @@ export function getDataType(value) {
 export function parseProp(line) {
   try {
     if (typeof line === "string") {
-      const sngLn = line.replace("\n", "");
+      const lineTr = line.trim();
+      const sngLn = lineTr.replace("\n", "");
       const prms = sngLn.match(/^export let (.+) = (.+);/);
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
@@ -88,6 +155,7 @@ export function parseProp(line) {
         name,
         defaultValue,
         dataType: getDataType(defaultValue),
+        script: line,
       };
     }
   } catch (e) {
@@ -98,7 +166,8 @@ export function parseProp(line) {
 export function parseData(line) {
   try {
     if (typeof line === "string") {
-      const sngLn = line.replace("\n", "");
+      const lineTr = line.trim();
+      const sngLn = lineTr.replace("\n", "");
       let prms;
       if (sngLn.includes("let ")) {
         prms = sngLn.match(/^let (.+) = (.+);/);
@@ -111,12 +180,226 @@ export function parseData(line) {
         name,
         defaultValue,
         dataType: getDataType(defaultValue),
+        script: line,
       };
     }
   } catch (e) {
     return null;
   }
 }
+
+export function parseScript(schema) {
+  if (
+    get(schema, "type") === "svelteScript" &&
+    get(schema, "tagName") === "script"
+  ) {
+    const children = get(schema, "children[0].value");
+
+    // Item types
+    let svelteCmpts = [];
+    let importVars = [];
+    let props = [];
+    let methods = [];
+    let data = [];
+    let watch = [];
+
+    // Hooks
+    let hookKeys = Object.keys(HOOKS);
+    let hookVals = Object.values(HOOKS);
+    let hooks = {};
+    let hookMatch = new RegExp(`^(${hookKeys.join("|")})`);
+
+    const cs = children.split("\n").filter(c => c);
+    // Multi-line code
+    let multiline = "";
+    let mLType = null;
+    let isLineEnd = true;
+
+    function startLine(_mLType, _line) {
+      if (isLineEnd && !multiline) {
+        isLineEnd = false;
+        mLType = _mLType;
+        multiline += multiline ? `\n${_line}` : `${_line}`;
+      }
+    }
+
+    function contLine(_line) {
+      if (!isLineEnd) {
+        multiline += multiline ? `\n${_line}` : `${_line}`;
+      }
+    }
+
+    function endLine() {
+      multiline = multiline.trim();
+      isLineEnd = true;
+    }
+
+    function resetLine() {
+      multiline = "";
+      mLType = null;
+      isLineEnd = true;
+    }
+
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      const cTr = c.trim();
+      contLine(c);
+
+      // Imports
+      if (mLType === "import" || cTr.match(/^import/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!cTr.match(/;$/)) {
+          startLine("import", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        // Complete line
+        if (isLineEnd) {
+          const line = multiline || c;
+          if (line) {
+            let params = parseImport(line);
+            if (params && params.type === "svelteComponent") {
+              svelteCmpts.push(params);
+            } else {
+              importVars.push(params);
+            }
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Props
+      if (mLType === "prop" || cTr.match(/export let/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!checkBrackets(multiline || c)) {
+          startLine("prop", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        if (isLineEnd) {
+          const line = multiline || c;
+          const p = parseProp(line);
+          if (p) {
+            props.push(p);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Hooks
+      if (mLType === "hooks" || cTr.match(hookMatch)) {
+        // Multi-line
+        // - Set multi-line
+        if (!checkBrackets(multiline || c)) {
+          startLine("hooks", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        if (isLineEnd) {
+          const line = multiline || c;
+          const f = line;
+          if (f) {
+            hooks.push(f);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Watch methods
+      if (mLType === "watch" || cTr.match(/^\$: \{/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!checkBrackets(multiline || c)) {
+          startLine("watch", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        if (isLineEnd) {
+          const line = multiline || c;
+          const f = line;
+          if (f) {
+            watch.push(f);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Method
+      if (
+        mLType === "method" ||
+        (!cTr.match(/^\$: /) && (cTr.match(/=>/) || cTr.match(/function/)))
+      ) {
+        // Multi-line
+        // - Set multi-line
+        if (!parseFunction(multiline || c)) {
+          startLine("method", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        if (isLineEnd) {
+          const line = multiline || c;
+          const f = parseFunction(line);
+          if (f) {
+            methods.push(f);
+          }
+          resetLine();
+        }
+        continue;
+      }
+
+      // Data
+      if (mLType === "data" || cTr.match(/let /) || cTr.match(/\$: (.+) =/)) {
+        // Multi-line
+        // - Set multi-line
+        if (!checkBrackets(multiline || c)) {
+          startLine("data", c);
+        } else {
+          // - End line
+          endLine();
+        }
+
+        if (isLineEnd) {
+          const line = multiline || c;
+          const p = parseData(line);
+          if (p) {
+            data.push(p);
+          }
+          resetLine();
+        }
+        continue;
+      }
+    }
+
+    const opts = {
+      svelteCmpts,
+      importVars,
+      props,
+      methods,
+      data,
+      watch,
+      hooks,
+    };
+    return opts;
+  }
+}
+
+export function writeScript(parsed) {}
 
 // Elements
 function printProperties(properties) {
@@ -189,7 +472,7 @@ const ifBlocks = {
 };
 const ifBlockNames = Object.keys(ifBlocks);
 
-const parseEachExp = (eachExp) => {
+const parseEachExp = eachExp => {
   if (typeof eachExp === "string") {
     let key;
     let exp = "";
@@ -200,7 +483,7 @@ const parseEachExp = (eachExp) => {
     if (!item) {
       return null;
     }
-    item.split(/[, ]/).forEach((w) => {
+    item.split(/[, ]/).forEach(w => {
       const wt = w.trim();
       if (wt) {
         // Value in brackets are keys
@@ -269,7 +552,7 @@ export function printSvEl(el, initialString) {
             brExprVal ? `="${brExprVal}"` : ""
           }>`;
           if (get(brChildren, "length")) {
-            brChildren.forEach((ch) => {
+            brChildren.forEach(ch => {
               str += printSvEl(ch);
             });
           }
@@ -287,7 +570,7 @@ export function printSvEl(el, initialString) {
             key ? `:key="${key}"` : ""
           }>`;
           if (get(brChildren, "length")) {
-            brChildren.forEach((ch) => {
+            brChildren.forEach(ch => {
               str += printSvEl(ch);
             });
           }
