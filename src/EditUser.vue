@@ -73,4 +73,42 @@
     </template>
   </div>
 </InfoLayerTemplate>
-<template>
+</template>
+
+<script>
+import { defineComponent, ref, reactive } from '@nuxtjs/composition-api';
+import get from "lodash.get";
+import { onMount } from "svelte";
+import { object, string } from "yup";
+import { _ } from "svelte-i18n";
+import jwtDecode from "jwt-decode";
+import Form from "@cmpnts/Utility/Form/Form.svelte";
+import FormInput from "@cmpnts/Utility/Form/FormInput.svelte";
+import PictureImage from "@cmpnts/Utility/PictureImage/PictureImage.svelte";
+import FileInput from "@cmpnts/Utility/Form/FileInput.svelte";
+import ResetPassword from "@cmpnts/User/ResetPassword.svelte";
+import Spinner from "@cmpnts/Library/Spinner.svelte";
+import InfoLayerTemplate from "@cmpnts/Info/Utility/InfoLayerTemplate.svelte";
+import { userAccount, logout } from "@stores/userAccount.js";
+import { stringToBoolean } from "@utils/string.js";
+import config from "@utils/config.js";
+import { getInitialValues, formatOptions } from "@utils/form.js";
+import { setHeaderParams } from "@utils/apollo.js";
+import { GET_USER_OPTS, UPDATE_USER } from "@graphql/userAccount.js";
+import { getClient, query, mutate } from "svelte-apollo";
+
+export default defineComponent({
+
+  setup(props) {
+    const { hasClose, token } = reactive(props);
+    const id = ref(get($userAccount, "id"));
+    const isLoggedIn = ref(get($userAccount, "isLoggedIn"));
+    const email = ref(get($userAccount, "email"));
+    const userData = reactive({});
+    const isLoading = ref(true);
+    const popUp = ref(null);
+    const isOpenResetPwd = ref(false);
+
+  }
+});
+</script>

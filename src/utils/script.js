@@ -73,6 +73,8 @@ export function parseImport(line) {
     lib = lib ? lib.replace(".js", "") : "";
 
     return {
+      block: "import",
+      defaultVars,
       vars,
       lib,
       type,
@@ -96,6 +98,7 @@ export function parseFunction(line) {
         // Definition - Async? Arrow function with let / const?
         const def = get(p, `[1]`);
         return {
+          block: "method",
           name,
           def,
           script: line,
@@ -116,6 +119,7 @@ export function parseHook(line) {
       const f = Function(lineTr);
       if (f) {
         return {
+          block: "hook",
           hookKey: hook,
           hookVal: get(HOOKS, hook),
           script: line,
@@ -153,9 +157,25 @@ export function parseProp(line) {
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
       return {
+        block: "prop",
         name,
         defaultValue,
         dataType: getDataType(defaultValue),
+        script: line,
+      };
+    }
+  } catch (e) {
+    return null;
+  }
+}
+
+export function parseComp(line) {
+  try {
+    if (typeof line === "string") {
+      const lineTr = line.trim();
+      const isAsync = !!lineTr.match(/(async)/);
+      return {
+        block: isAsync ? "watch" : "computed",
         script: line,
       };
     }
@@ -178,6 +198,7 @@ export function parseData(line) {
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
       return {
+        block: "data",
         name,
         defaultValue,
         dataType: getDataType(defaultValue),
@@ -189,6 +210,90 @@ export function parseData(line) {
   }
 }
 
+const scriptBlockTypes = [
+  {
+    key: "import",
+    match: content => {
+      return content.match(/^import/);
+    },
+    checkMultiline: content => {
+      return !content.match(/;$/);
+    },
+    parse: content => {
+      let params = parseImport(content);
+      return params;
+    },
+  },
+  {
+    key: "prop",
+    match: content => {
+      return content.match(/export let/);
+    },
+    checkMultiline: content => {
+      return !checkBrackets(content);
+    },
+    parse: content => {
+      let params = parseProp(content);
+      return params;
+    },
+  },
+  {
+    key: "hook",
+    match: content => {
+      return content.match(hookMatch);
+    },
+    checkMultiline: content => {
+      return !checkBrackets(content);
+    },
+    parse: content => {
+      let params = parseHook(content);
+      return params;
+    },
+  },
+  {
+    key: "watch",
+    match: content => {
+      return content.match(/^\$: \{/);
+    },
+    checkMultiline: content => {
+      return !checkBrackets(content);
+    },
+    parse: content => {
+      let params = parseComp(content);
+      return params;
+    },
+  },
+  {
+    key: "method",
+    match: content => {
+      return (
+        !content.match(/^\$: /) &&
+        (content.match(/=>/) || content.match(/function/))
+      );
+    },
+    checkMultiline: content => {
+      return !parseFunction(content);
+    },
+    parse: content => {
+      let params = parseFunction(content);
+      return params;
+    },
+  },
+  {
+    key: "data",
+    match: content => {
+      return content.match(/let /) || content.match(/\$: (.+) =/);
+    },
+    checkMultiline: content => {
+      return !checkBrackets(content);
+    },
+    parse: content => {
+      let params = parseData(content);
+      return params;
+    },
+  },
+];
+
 export function parseScript(schema) {
   if (
     get(schema, "type") === "svelteScript" &&
@@ -197,15 +302,7 @@ export function parseScript(schema) {
     const children = get(schema, "children[0].value");
 
     // Item types
-    let svelteCmpts = [];
-    let importVars = [];
-    let props = [];
-    let methods = [];
-    let data = [];
-    let watch = [];
-
-    // Hooks
-    const hooks = [];
+    let blocks = [];
 
     const cs = children.split("\n").filter(c => c);
     // Multi-line code
@@ -243,158 +340,92 @@ export function parseScript(schema) {
       const cTr = c.trim();
       contLine(c);
 
-      // Imports
-      if (mLType === "import" || cTr.match(/^import/)) {
-        // Multi-line
-        // - Set multi-line
-        if (!cTr.match(/;$/)) {
-          startLine("import", c);
-        } else {
-          // - End line
-          endLine();
-        }
+      for (let i = 0; i < scriptBlockTypes.length; i++) {
+        const { key, match, checkMultiline, parse } = scriptBlockTypes[i];
 
-        // Complete line
-        if (isLineEnd) {
-          const line = multiline || c;
-          if (line) {
-            let params = parseImport(line);
-            if (params && params.type === "svelteComponent") {
-              svelteCmpts.push(params);
-            } else {
-              importVars.push(params);
+        if (mLType === key || match(cTr)) {
+          // Multi-line
+          // - Set multi-line
+          if (checkMultiline(multiline || c)) {
+            startLine(key, c);
+          } else {
+            // - End line
+            endLine();
+          }
+
+          // Complete line
+          if (isLineEnd) {
+            const line = multiline || c;
+            if (line) {
+              let params = parse(line);
+              if (params) {
+                blocks.push(params);
+              }
             }
+            resetLine();
           }
-          resetLine();
+          continue;
         }
-        continue;
-      }
-
-      // Props
-      if (mLType === "prop" || cTr.match(/export let/)) {
-        // Multi-line
-        // - Set multi-line
-        if (!checkBrackets(multiline || c)) {
-          startLine("prop", c);
-        } else {
-          // - End line
-          endLine();
-        }
-
-        if (isLineEnd) {
-          const line = multiline || c;
-          const p = parseProp(line);
-          if (p) {
-            props.push(p);
-          }
-          resetLine();
-        }
-        continue;
-      }
-
-      // Hooks
-      if (mLType === "hooks" || cTr.match(hookMatch)) {
-        // Multi-line
-        // - Set multi-line
-        if (!checkBrackets(multiline || c)) {
-          startLine("hooks", c);
-        } else {
-          // - End line
-          endLine();
-        }
-
-        if (isLineEnd) {
-          const line = multiline || c;
-          const f = parseHook(line);
-          if (f) {
-            hooks.push(f);
-          }
-          resetLine();
-        }
-        continue;
-      }
-
-      // Watch methods
-      if (mLType === "watch" || cTr.match(/^\$: \{/)) {
-        // Multi-line
-        // - Set multi-line
-        if (!checkBrackets(multiline || c)) {
-          startLine("watch", c);
-        } else {
-          // - End line
-          endLine();
-        }
-
-        if (isLineEnd) {
-          const line = multiline || c;
-          const f = line;
-          if (f) {
-            watch.push(f);
-          }
-          resetLine();
-        }
-        continue;
-      }
-
-      // Method
-      if (
-        mLType === "method" ||
-        (!cTr.match(/^\$: /) && (cTr.match(/=>/) || cTr.match(/function/)))
-      ) {
-        // Multi-line
-        // - Set multi-line
-        if (!parseFunction(multiline || c)) {
-          startLine("method", c);
-        } else {
-          // - End line
-          endLine();
-        }
-
-        if (isLineEnd) {
-          const line = multiline || c;
-          const f = parseFunction(line);
-          if (f) {
-            methods.push(f);
-          }
-          resetLine();
-        }
-        continue;
-      }
-
-      // Data
-      if (mLType === "data" || cTr.match(/let /) || cTr.match(/\$: (.+) =/)) {
-        // Multi-line
-        // - Set multi-line
-        if (!checkBrackets(multiline || c)) {
-          startLine("data", c);
-        } else {
-          // - End line
-          endLine();
-        }
-
-        if (isLineEnd) {
-          const line = multiline || c;
-          const p = parseData(line);
-          if (p) {
-            data.push(p);
-          }
-          resetLine();
-        }
-        continue;
       }
     }
-
-    const opts = {
-      svelteCmpts,
-      importVars,
-      props,
-      methods,
-      data,
-      watch,
-      hooks,
-    };
-    return opts;
+    return blocks;
   }
+  return null;
 }
 
-export function printScript(parsed) {}
+export function printScript(parsed) {
+  let scrStr = "";
+  let impCmpApi = "";
+  // Script tags
+  impCmpApi += "\n<script>\n";
+  // Import composition API
+  impCmpApi += `import { defineComponent, ref, reactive } from '@nuxtjs/composition-api';\n`;
+
+  // Imports
+  let imports = [];
+  let otherScripts = [];
+  let props = [];
+
+  parsed.forEach(p => {
+    if (p.block === "import") {
+      imports.push(p);
+    } else if (p.block === "prop") {
+      props.push(p);
+    } else {
+      otherScripts.push(p);
+    }
+  });
+  imports.forEach(i => {
+    impCmpApi += `${i.script.trim()}\n`;
+  });
+
+  impCmpApi += `\nexport default defineComponent({\n
+  setup(${props.length ? "props" : ""}) {\n`;
+
+  const sp = "    ";
+
+  let bodyScr = "";
+  bodyScr += props.length
+    ? `${sp}const { ${props.map(p => p.name).join(", ")} } = reactive(props);\n`
+    : "";
+  if (parsed) {
+    for (let i = 0; i < otherScripts.length; i++) {
+      const el = otherScripts[i];
+      if (el.block === "data") {
+        const { name, defaultValue, dataType } = el;
+        const ref = defaultValue.trim().match(/^(\[|\{)/) ? "reactive" : "ref";
+        bodyScr += `${sp}const ${name}${
+          defaultValue
+            ? ` = ${ref}${ref ? "(" : ""}${defaultValue}${ref ? ")" : ""}`
+            : ""
+        };\n`;
+      } else if (el.block === "prop") {
+      }
+    }
+  }
+
+  impCmpApi += `${bodyScr}\n  }\n`;
+  impCmpApi += `});\n`;
+  impCmpApi += "</script>";
+  return impCmpApi;
+}

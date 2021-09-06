@@ -1,6 +1,6 @@
 import get from "lodash.get";
 import { printSvEl } from "./utils/elements.js";
-import { parseScript } from "./utils/elements.js";
+import { parseScript, printScript } from "./utils/script.js";
 
 export function writeToVue(name, schema) {
   if (get(schema, "type") === "root") {
@@ -15,6 +15,7 @@ export function writeToVue(name, schema) {
       );
     });
     const parsedScripts = parseScript(scripts);
+    scriptStr += printScript(parsedScripts);
 
     const elements = children.filter(child => {
       return !(
@@ -30,7 +31,7 @@ export function writeToVue(name, schema) {
         const el = elements[i];
         str += printSvEl(el);
       }
-      str += "\n<template>";
+      str += "\n</template>";
       templateStr = str;
     }
 
