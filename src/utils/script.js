@@ -47,7 +47,7 @@ export function parseImport(line) {
     let isChild = false;
     let defaultVars = [];
     let vars = [];
-    varsParsed.split(",").forEach(c => {
+    varsParsed.split(",").forEach((c) => {
       if (c) {
         if (c.includes("{")) {
           isChild = true;
@@ -213,81 +213,81 @@ export function parseData(line) {
 const scriptBlockTypes = [
   {
     key: "import",
-    match: content => {
+    match: (content) => {
       return content.match(/^import/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !content.match(/;$/);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseImport(content);
       return params;
     },
   },
   {
     key: "prop",
-    match: content => {
+    match: (content) => {
       return content.match(/export let/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseProp(content);
       return params;
     },
   },
   {
     key: "hook",
-    match: content => {
+    match: (content) => {
       return content.match(hookMatch);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseHook(content);
       return params;
     },
   },
   {
     key: "watch",
-    match: content => {
+    match: (content) => {
       return content.match(/^\$: \{/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseComp(content);
       return params;
     },
   },
   {
     key: "method",
-    match: content => {
+    match: (content) => {
       return (
         !content.match(/^\$: /) &&
         (content.match(/=>/) || content.match(/function/))
       );
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !parseFunction(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseFunction(content);
       return params;
     },
   },
   {
     key: "data",
-    match: content => {
+    match: (content) => {
       return content.match(/let /) || content.match(/\$: (.+) =/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseData(content);
       return params;
     },
@@ -304,7 +304,7 @@ export function parseScript(schema) {
     // Item types
     let blocks = [];
 
-    const cs = children.split("\n").filter(c => c);
+    const cs = children.split("\n").filter((c) => c);
     // Multi-line code
     let multiline = "";
     let mLType = null;
@@ -425,10 +425,10 @@ const returnBlockTypes = ["prop", "data", "method"];
 function getReturnVals(blocks) {
   if (get(blocks, "length")) {
     const returnVals = blocks
-      .filter(bl => {
+      .filter((bl) => {
         return returnBlockTypes.includes(bl.block);
       })
-      .map(bl => {
+      .map((bl) => {
         return bl.name;
       })
       .join(", ");
@@ -450,7 +450,7 @@ export function printScript(parsed) {
   let props = [];
   let data = [];
 
-  parsed.forEach(p => {
+  parsed.forEach((p) => {
     if (p.block === "import") {
       imports.push(p);
     } else if (p.block === "prop") {
@@ -462,7 +462,8 @@ export function printScript(parsed) {
       otherScripts.push(p);
     }
   });
-  imports.forEach(i => {
+  // Imports components
+  imports.forEach((i) => {
     scrStr += `${i.script.trim()}\n`;
   });
 
@@ -475,7 +476,7 @@ export function printScript(parsed) {
   let bodyScr = "";
 
   bodyScr += props.length
-    ? `${sp}const { ${props.map(p => p.name).join(", ")} } = toRefs(props);\n`
+    ? `${sp}const { ${props.map((p) => p.name).join(", ")} } = toRefs(props);\n`
     : "";
   if (parsed) {
     // State changes (refs)
@@ -497,7 +498,7 @@ export function printScript(parsed) {
       }
     }
   }
-  bodyScr += getReturnVals(parsed);
+  bodyScr += `${sp}${getReturnVals(parsed)}`;
 
   scrStr += `${bodyScr}\n  }\n`;
   // Setup ----- End

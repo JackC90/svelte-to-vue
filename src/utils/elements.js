@@ -71,7 +71,7 @@ const ifBlocks = {
 };
 const ifBlockNames = Object.keys(ifBlocks);
 
-const parseEachExp = eachExp => {
+const parseEachExp = (eachExp) => {
   if (typeof eachExp === "string") {
     let key;
     let exp = "";
@@ -82,7 +82,7 @@ const parseEachExp = eachExp => {
     if (!item) {
       return null;
     }
-    item.split(/[, ]/).forEach(w => {
+    item.split(/[, ]/).forEach((w) => {
       const wt = w.trim();
       if (wt) {
         // Value in brackets are keys
@@ -94,15 +94,41 @@ const parseEachExp = eachExp => {
         }
       }
     });
+    // Index variable
+    let index;
+    if (item.match(/[\[\{\}\]]/)) {
+      index = get(
+        item.match(/(?<=([\]\}.]+, *))(\b.+\b)(?=(( *\()|$))/g),
+        "[0]"
+      );
+    } else {
+      index = get(item.match(/(?<=(.+, *))(\b.+\b)(?=(( *\()|$))/g), "[0]");
+    }
+
     const varsStr = vars.length > 1 ? `(${vars.join(", ")})` : get(vars, "[0]");
     exp = `${varsStr} in ${collection}`;
     return {
       exp,
       key,
+      index,
     };
   }
   return null;
 };
+
+function generateForKey(key, place) {
+  if (key) {
+    const length = place;
+    let res = `\`\${${key}}`;
+    for (let i = 0; i < length; i++) {
+      res += `-\`\${${key}}`;
+    }
+    res += `\``;
+  }
+  return key;
+}
+
+const empty = [];
 
 export function printSvEl(el, initialString) {
   let initString = initialString || "";
@@ -121,7 +147,7 @@ export function printSvEl(el, initialString) {
   if (type === "text") {
     str += value || "";
   } else if (type === "comment") {
-    str += `// ${value}`;
+    str += `<!--  ${value} -->`;
   } else if (type === "svelteDynamicContent") {
     str += `{{ ${get(expression, "value")} }}`;
   } else if (type === "svelteElement" || type === "svelteComponent") {
@@ -151,7 +177,7 @@ export function printSvEl(el, initialString) {
             brExprVal ? `="${brExprVal}"` : ""
           }>`;
           if (get(brChildren, "length")) {
-            brChildren.forEach(ch => {
+            brChildren.forEach((ch) => {
               str += printSvEl(ch);
             });
           }
@@ -164,14 +190,44 @@ export function printSvEl(el, initialString) {
           const branch = branches[i];
           const { expression: brExpression, children: brChildren } = branch;
           const exp = parseEachExp(get(brExpression, "value"));
-          const key = get(exp, "key");
-          str += `<template v-for="${get(exp, "exp", "")}" ${
-            key ? `:key="${key}"` : ""
-          }>`;
+          str += `<template v-for="${get(exp, "exp", "")}">`;
+          let svelteCmpCount = 0;
           if (get(brChildren, "length")) {
-            brChildren.forEach(ch => {
+            for (let i = 0; i < brChildren.length; i++) {
+              const ch = brChildren[i];
+              // Add keys to children
+              if (
+                (ch.type === "svelteElement" ||
+                  ch.type === "svelteComponent") &&
+                !get(ch, "properties", empty).find((pr) => pr.name === "key")
+              ) {
+                const key = {
+                  type: "svelteProperty",
+                  name: "key",
+                  value: [
+                    {
+                      type: "svelteDynamicContent",
+                      expression: {
+                        type: "svelteExpression",
+                        value: generateForKey(
+                          get(exp, "key") || get(exp, "index") || "",
+                          svelteCmpCount
+                        ),
+                      },
+                    },
+                  ],
+                  modifiers: [],
+                  shorthand: "none",
+                };
+                if (Array.isArray(ch.properties)) {
+                  ch.properties.push(key);
+                } else {
+                  ch.properties = [key];
+                }
+                svelteCmpCount += 1;
+              }
               str += printSvEl(ch);
-            });
+            }
           }
           str += `</template>`;
         }
