@@ -3,6 +3,9 @@ import get from "lodash.get";
 // Elements
 function printProperties(properties) {
   let str = "";
+
+  // Parameters for creating parent, e.g. wrapper <template>
+  let params = {};
   if (Array.isArray(properties) && properties.length) {
     const types = ["svelteProperty", "svelteDirective"];
     const slotVars = [];
@@ -20,6 +23,7 @@ function printProperties(properties) {
             if (name === "on") {
               str += ` @${specifier}`;
             } else if (name === "let") {
+              // Slot params
               slotVars.push(specifier);
             } else {
               str += ` :${specifier}`;
@@ -27,41 +31,48 @@ function printProperties(properties) {
           } else if (shorthand === "expression" && name.match(/^\.\.\.(.+)$/)) {
             // Destructuring
             str += ` v-bind`;
-          } else {
+          } else if (name !== "slot") {
+            // Other properties
             str += ` ${isDynamic ? ":" : ""}${name}`;
           }
-          // Slot
+          // Slot - move to parent
           if (type === "svelteProperty" && name === "slot") {
-            slotName = get(value, "value");
+            slotName = get(value, "[0]value");
           }
           // Value
           let valStr = "";
-          value.forEach(({ type, value, expression }) => {
-            if (type === "text") {
-              valStr += value;
-            }
-            if (type === "svelteDynamicContent") {
-              let val = get(expression, "value");
-              // Destructuring shorthand
-              if (shorthand === "expression") {
-                const matches = val.match(/^\.\.\.(.+)$/);
-                const destruct = get(matches, "[1]");
-                val = destruct ? destruct : val;
+          if (name !== "slot") {
+            value.forEach(({ type, value, expression }) => {
+              if (type === "text") {
+                valStr += value;
               }
-              valStr += val;
-            }
-          });
-          str += valStr ? `="${valStr}"` : ``;
+              if (type === "svelteDynamicContent") {
+                let val = get(expression, "value");
+                // Destructuring shorthand
+                if (shorthand === "expression") {
+                  const matches = val.match(/^\.\.\.(.+)$/);
+                  const destruct = get(matches, "[1]");
+                  val = destruct ? destruct : val;
+                }
+                valStr += val;
+              }
+            });
+            str += valStr ? `="${valStr}"` : ``;
+          }
         }
       }
     }
     // Handle slots
     if (slotVars.length) {
       const sn = slotName ? slotName : "default";
-      str += ` #${sn}="{ ${slotVars.join(", ")} }"`;
+      const propertyString = ` #${sn}="{ ${slotVars.join(", ")} }"`;
+      params.parent = {
+        tagName: "template",
+        propertyString,
+      };
     }
   }
-  return str;
+  return { content: str, params };
 }
 
 const ifBlocks = {
@@ -151,16 +162,27 @@ export function printSvEl(el, initialString) {
   } else if (type === "svelteDynamicContent") {
     str += `{{ ${get(expression, "value")} }}`;
   } else if (type === "svelteElement" || type === "svelteComponent") {
-    str += `<${tagName}`;
-    str += printProperties(properties);
-    str += selfClosing ? ` />` : `>`;
+    const { params: elPropParams, content: elPropContent } =
+      printProperties(properties);
+    let elStr = "";
+    elStr += `<${tagName}`;
+    elStr += elPropContent;
+    elStr += selfClosing ? ` />` : `>`;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      str += printSvEl(child);
+      elStr += printSvEl(child);
     }
     if (!selfClosing) {
-      str += `</${tagName}>`;
+      elStr += `</${tagName}>`;
     }
+    // Wrap with parent element
+    const parent = get(elPropParams, "parent");
+    if (parent) {
+      const { tagName, propertyString } = parent;
+      elStr = `<${tagName}${propertyString}>${elStr}</${tagName}>`;
+    }
+
+    str += elStr;
   } else if (type === "svelteBranchingBlock") {
     if (ifBlockNames.includes(name)) {
       if (get(branches, "length")) {

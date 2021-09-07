@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 const __dirname = path.resolve();
 
-const fileUrl = __dirname + "/src/Carousel.svelte"; // provide file location
+const fileUrl = __dirname + "/src/TopBar.svelte"; // provide file location
 
 export const parseFile = (filename, options) => {
   fs.readFile(filename, "utf8", function (err, data) {

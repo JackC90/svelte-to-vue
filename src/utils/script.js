@@ -42,7 +42,8 @@ export function parseImport(line) {
     const lineTr = line.trim();
     const type = lineTr.includes(".svelte") ? "svelteComponent" : "library";
     const sngLn = lineTr.replace("\n", "");
-    let varsParsed = get(sngLn.match(/^import (.+) from/), "[1]");
+    const mtc = sngLn.match(/^import (.+) from/);
+    let varsParsed = get(mtc, "[1]", "");
 
     let isChild = false;
     let defaultVars = [];
@@ -66,7 +67,8 @@ export function parseImport(line) {
       }
     });
 
-    let lib = get(sngLn.match(/ from ["'](.+)["'];$/), "[1]");
+    const libMtc = sngLn.match(/ from ["'](.+)["'];$/);
+    let lib = get(libMtc, "[1]", "");
     let category = get(lib.match("^@[a-zA-Z0-9]*"), "[0]");
     lib = lib.split("/");
     lib = get(lib, `[${lib.length - 1}]`);
@@ -327,7 +329,7 @@ export function parseScript(schema) {
     get(schema, "type") === "svelteScript" &&
     get(schema, "tagName") === "script"
   ) {
-    const children = get(schema, "children[0].value");
+    const children = get(schema, "children[0].value", "");
 
     // Item types
     let blocks = [];
@@ -521,7 +523,7 @@ export function printScript(parsed) {
   });
 
   // Setup ----- Start
-  scrStr += `export default defineComponent({\n
+  scrStr += `\nexport default defineComponent({\n
   setup(${props.length ? "props" : ""}) {\n`;
 
   const sp = "    ";
