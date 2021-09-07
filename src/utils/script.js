@@ -132,18 +132,20 @@ export function parseHook(line) {
 }
 
 export function getDataType(value) {
-  let dataType;
-  if (value.match(/^["']|["']$/)) {
-    dataType = "String";
-  } else if (!isNaN(value)) {
-    dataType = "Number";
-  } else if (value.match(/^\[|\]$/)) {
-    dataType = "Array";
-  } else if (value.match(/^\{|\}$/)) {
-    dataType = "Object";
-  } else if (value === "true" || value === "false") {
-    dataType = "Boolean";
-  } else if (value === "null") {
+  let dataType = null;
+  if (typeof value === "string") {
+    if (value.match(/^["']|["']$/)) {
+      dataType = "String";
+    } else if (!isNaN(value)) {
+      dataType = "Number";
+    } else if (value.match(/^\[|\]$/)) {
+      dataType = "Array";
+    } else if (value.match(/^\{|\}$/)) {
+      dataType = "Object";
+    } else if (value === "true" || value === "false") {
+      dataType = "Boolean";
+    } else if (value === "null") {
+    }
   }
   return dataType;
 }
@@ -169,13 +171,31 @@ export function parseProp(line) {
   }
 }
 
-export function parseComp(line) {
+export function parseWatch(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
-      const isAsync = !!lineTr.match(/(async)/);
+      const isComp = lineTr.match(/\$: (.+) =/);
+      let prms;
+      let name;
+      let expression;
+      if (isComp) {
+        prms = sngLn.match(/^\$: (.+) = (.+);/);
+        name = get(prms, "[1]");
+        expression = get(prms, "[2]");
+      } else {
+        let exp = lineTr.replace(/^\$: */g, "");
+        if (exp.match(/^\{.*\}$/g)) {
+          expression = `() => ${exp}`;
+        } else if (checkBrackets(exp)) {
+          expression = `() => {${exp}}`;
+        }
+      }
+
       return {
-        block: isAsync ? "watch" : "computed",
+        block: isComp ? "computed" : "watch",
+        name,
+        expression,
         script: line,
       };
     }
@@ -190,10 +210,17 @@ export function parseData(line) {
       const lineTr = line.trim();
       const sngLn = lineTr.replace("\n", "");
       let prms;
+      let ref = true;
       if (sngLn.includes("let ")) {
         prms = sngLn.match(/^let (.+) = (.+);/);
-      } else if (sngLn.includes("$: ")) {
-        prms = sngLn.match(/^\$: (.+) = (.+);/);
+
+        // States with no default value
+        if (!prms) {
+          prms = sngLn.match(/^let (.+);/);
+        }
+      } else if (sngLn.includes("const ")) {
+        ref = false;
+        prms = sngLn.match(/^const (.+) = (.+);/);
       }
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
@@ -203,6 +230,7 @@ export function parseData(line) {
         defaultValue,
         dataType: getDataType(defaultValue),
         script: line,
+        ref,
       };
     }
   } catch (e) {
@@ -253,13 +281,13 @@ const scriptBlockTypes = [
   {
     key: "watch",
     match: (content) => {
-      return content.match(/^\$: \{/);
+      return content.match(/^\$: */);
     },
     checkMultiline: (content) => {
       return !checkBrackets(content);
     },
     parse: (content) => {
-      let params = parseComp(content);
+      let params = parseWatch(content);
       return params;
     },
   },
@@ -282,7 +310,7 @@ const scriptBlockTypes = [
   {
     key: "data",
     match: (content) => {
-      return content.match(/let /) || content.match(/\$: (.+) =/);
+      return content.match(/let /) || content.match(/const /);
     },
     checkMultiline: (content) => {
       return !checkBrackets(content);
@@ -364,7 +392,7 @@ export function parseScript(schema) {
             }
             resetLine();
           }
-          continue;
+          break;
         }
       }
     }
@@ -420,7 +448,20 @@ function getFunction(blockParams, states) {
   return "";
 }
 
-const returnBlockTypes = ["prop", "data", "method"];
+function getWatch(blockParams, states) {
+  if (blockParams) {
+    const { block, expression, name } = blockParams;
+    let str = replaceStates(expression, states);
+    if (block === "watch") {
+      return `watchEffect(${str});`;
+    } else if (block === "computed") {
+      return `const ${name} = computed(${str});`;
+    }
+  }
+  return "";
+}
+
+const returnBlockTypes = ["prop", "data", "method", "computed"];
 
 function getReturnVals(blocks) {
   if (get(blocks, "length")) {
@@ -429,7 +470,19 @@ function getReturnVals(blocks) {
         return returnBlockTypes.includes(bl.block);
       })
       .map((bl) => {
-        return bl.name;
+        const blTr = bl.name ? bl.name.trim() : "";
+        if (blTr.match(/^[\{\[].*[\]\}]$/g)) {
+          const spread = (blTr.replace(/[\{\[)\]\} \n]/g) || "")
+            .split(",")
+            .filter((val) => val && val !== "null" && val !== "undefined")
+            .map((val) => val.trim())
+            .join(", ");
+          return spread;
+        }
+        return blTr;
+      })
+      .filter((val) => {
+        return val && val !== "null" && val !== "undefined";
       })
       .join(", ");
     return `return { ${returnVals} }`;
@@ -442,7 +495,7 @@ export function printScript(parsed) {
   // Script tags
   scrStr += "\n<script>\n";
   // Import composition API
-  scrStr += `import { defineComponent, ref, reactive, toRef } from '@nuxtjs/composition-api';\n`;
+  scrStr += `import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';\n`;
 
   // Imports
   let imports = [];
@@ -485,20 +538,25 @@ export function printScript(parsed) {
     for (let i = 0; i < otherScripts.length; i++) {
       const el = otherScripts[i];
       if (el.block === "data") {
-        const { name, defaultValue, dataType } = el;
-        const ref =
-          dataType === "Object" || dataType === "Array" ? "ref" : "ref";
+        const { name, defaultValue, dataType, ref: dataRef } = el;
+        const ref = dataRef ? "ref" : "";
         bodyScr += `${sp}const ${name}${
-          defaultValue
-            ? ` = ${ref}${ref ? "(" : ""}${defaultValue}${ref ? ")" : ""}`
+          ref || defaultValue
+            ? ` = ${ref}${ref ? "(" : ""}${
+                dataRef && !(defaultValue || defaultValue === "undefined")
+                  ? ""
+                  : defaultValue
+              }${ref ? ")" : ""}`
             : ""
         };\n`;
       } else if (el.block === "method" || el.block === "hook") {
         bodyScr += `\n${sp}${getFunction(el, states)}\n`;
+      } else if (el.block === "computed" || el.block === "watch") {
+        bodyScr += `\n${sp}${getWatch(el, states)}\n`;
       }
     }
   }
-  bodyScr += `${sp}${getReturnVals(parsed)}`;
+  bodyScr += `\n${sp}${getReturnVals(parsed)}`;
 
   scrStr += `${bodyScr}\n  }\n`;
   // Setup ----- End

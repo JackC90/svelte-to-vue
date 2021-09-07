@@ -76,7 +76,7 @@
 </template>
 
 <script>
-import { defineComponent, ref, reactive, toRef } from '@nuxtjs/composition-api';
+import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';
 import get from "lodash.get";
 import { onMount } from "svelte";
 import { object, string } from "yup";
@@ -100,9 +100,8 @@ export default defineComponent({
 
   setup(props) {
     const { hasClose, token } = toRefs(props);
-    const id = ref(get($userAccount, "id"));
-    const isLoggedIn = ref(get($userAccount, "isLoggedIn"));
-    const email = ref(get($userAccount, "email"));
+    const { isDemo } = ref(config);
+    const client = ref(getClient());
     const userData = ref({});
     const isLoading = ref(true);
     const popUp = ref(null);
@@ -116,12 +115,12 @@ export default defineComponent({
     onMounted(async () => {
     isLoading.value = false;
     try {
-      if (email.value) {
+      if (email) {
         isLoading.value = true;
-        const result = await query(client, {
+        const result = await query(client.value, {
           query: GET_USER_OPTS,
           variables: {
-            email: email.value
+            email
           },
           ...setHeaderParams("user")
         }).result();
@@ -143,7 +142,7 @@ export default defineComponent({
     const onChangeAvatar = async (files, name) => {
     if (files && get(files, "[0]")) {
       const file = files[0];
-      const res = await mutate(client, {
+      const res = await mutate(client.value, {
         mutation: UPDATE_USER,
         variables: {
           id: userId,
@@ -168,10 +167,10 @@ export default defineComponent({
     try {
       setSubmitting(true);
       const { nickName, ceaNumber } = values;
-      const res = await client.mutate({
+      const res = await client.value.mutate({
         mutation: UPDATE_USER,
         variables: {
-          id: id.value,
+          id,
           patch: {
             nickName
           },
@@ -199,10 +198,10 @@ export default defineComponent({
   };
 
     const handleLogout = () => {
-    logout(client);
+    logout(client.value);
     onClose();
   };
-return { id, isLoggedIn, email, hasClose, token, userData, isLoading, popUp, isOpenResetPwd, toggleResetPwd, onChangeAvatar, submit, handleLogout }
+    return { { isDemo }, client, hasClose, token, userData, isLoading, popUp, isOpenResetPwd, toggleResetPwd, onChangeAvatar, submit, handleLogout }
   }
 });
 </script>

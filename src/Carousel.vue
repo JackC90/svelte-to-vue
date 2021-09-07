@@ -80,7 +80,12 @@
 </template>
 
 <script>
-import { defineComponent, ref, reactive, toRef } from "@nuxtjs/composition-api";
+import {
+  defineComponent,
+  ref,
+  reactive,
+  toRefs,
+} from "@nuxtjs/composition-api";
 import { _ } from "svelte-i18n";
 export default defineComponent({
   setup(props) {
@@ -97,6 +102,7 @@ export default defineComponent({
     const className = ref("");
     const activeIndex = ref(startIndex);
     const carouselWidth = ref(0);
+    const intervalCarousel = ref();
 
     let goTo = (index) => {
       if (index > items.value.length - 1) {
@@ -108,6 +114,17 @@ export default defineComponent({
       }
       onChange.value(activeIndex.value);
     };
+
+    watchEffect(() => {
+      {
+        if (autoplay.value !== 0 && !intervalCarousel.value) {
+          intervalCarousel.value = setInterval(() => {
+            goTo(activeIndex.value + 1);
+          }, autoplay.value);
+        }
+      }
+    });
+
     return {
       items,
       startIndex,
@@ -120,6 +137,7 @@ export default defineComponent({
       onChange,
       activeIndex,
       carouselWidth,
+      intervalCarousel,
       goTo,
     };
   },
