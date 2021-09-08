@@ -2,7 +2,7 @@
 
 
 <InfoLayerTemplate :hasClose="hasClose" :class="`right-0 bg-primary ${hasClose ? '' : 'w-full'}`" classHeader="border-b border-fade-gray bg-primary text-white" :onClose="() => onClose()">
-  <div slot="content-full">
+  <div>
     <template v-if="popUp">
       <div class="absolute inset-0 z-50 bg-black opacity-50" />
       <div class="absolute inset-0 z-50 flex items-center justify-center">
@@ -22,11 +22,11 @@
     </template>
   </div>
 
-  <span slot="header">{{ $_('user.profile') }}</span>
+  <span>{{ $_('user.profile') }}</span>
 
-  <div slot="content" class="m-20px">
+  <div class="m-20px">
     <FileInput name="avatar" :multiple="false" :onChange="onChangeAvatar" accept="image/*">
-      <div slot="label" class="flex justify-center">
+      <div class="flex justify-center">
         <PictureImage variant="round" class="w-90px h-90px shadow-under-md-fade btn" alt="user-image" fallbackSrc="/assets/userIcons/default-profile-icon.svg" :src="avatar || '/assets/userIcons/default-profile-icon.svg'" />
       </div>
     </FileInput>
@@ -37,14 +37,14 @@
       </div>
     </template><template v-else-if="isLoggedIn && userData && userData.id === id && initialValues">
       <div class="my-20px">
-        <Form :schema="schema" @submit="submit" :initialValues="initialValues" #default="{ isSubmitting, isValid, isDisabledBtn }">
+        <template #default="{ isSubmitting, isValid, isDisabledBtn }"><Form :schema="schema" @submit="submit" :initialValues="initialValues">
           <div class="body-3 text-fade-gray">
             {{ $_('user.personalinformation') }}
           </div>
           <hr class="border-b border-fade-gray my-5px" />
           <template v-for="item in items">
             <FormInput v-bind="item" layout="inline" :classInputWrapper="'text-white body-3 mb-10px'" :classLabel="'text-fade-gray mr-20px body-4'" :initialValue="get(initialValues, item.name)" :disabled="item.disabled != null ? item.disabled : isSubmitting || isDemo || isLoading" :key="item.name">
-              <div slot="action" :class="`${item.name === 'password' ? 'btn absolute top-0 right-0 w-full h-full text-white text-right text-sm' : ''}`" @click="() => {
+              <div :class="`${item.name === 'password' ? 'btn absolute top-0 right-0 w-full h-full text-white text-right text-sm' : ''}`" @click="() => {
                   if (item.name === 'password') {
                     toggleResetPwd(true);
                   }
@@ -57,7 +57,7 @@
           <button :class="`w-full btn py-15px px-20px my-20px rounded-15px border body-2 ${isDisabledBtn || isDemo ? 'border-fade-gray text-fade-gray bg-primary' : 'bg-white text-primary'}`" type="submit" :disabled="isDisabledBtn || isDemo">
             {{ $_('user.saveprofile') }}
           </button>
-        </Form>
+        </Form></template>
       </div>
     </template>
 
@@ -96,14 +96,23 @@ import { getInitialValues, formatOptions } from "@utils/form.js";
 import { setHeaderParams } from "@utils/apollo.js";
 import { GET_USER_OPTS, UPDATE_USER } from "@graphql/userAccount.js";
 import { getClient, query, mutate } from "svelte-apollo";
+
 export default defineComponent({
 
   setup(props) {
-    const { hasClose, token } = toRefs(props);
-    const { isDemo } = ref(config);
-    const client = ref(getClient());
+    const { hasClose, , token } = toRefs(props);
+    const { isDemo } = config;
+    const client = getClient();
+    const userId = ref();
+
+    watchEffect(() => {{
+    let decoded = token.value ? jwtDecode(token.value) : null;
+    userId.value = get($userAccount, "id") || (decoded ? decoded.id : null);
+  }});
     const userData = ref({});
+    const initialValues = ref();
     const isLoading = ref(true);
+    const avatar = ref();
     const popUp = ref(null);
     const isOpenResetPwd = ref(false);
 
@@ -111,6 +120,8 @@ export default defineComponent({
     isOpenResetPwd.value =
       boolean != null ? stringToBoolean(boolean) : !isOpenResetPwd.value;
   };
+    const undefined = ref();
+    const undefined = ref();
 
     onMounted(async () => {
     isLoading.value = false;
@@ -125,11 +136,11 @@ export default defineComponent({
           ...setHeaderParams("user")
         }).result();
         userData.value = get(result, "data.user") || {};
-        initialValues = {
+        initialValues.value = {
           ...getInitialValues(userData.value, items),
           ceaNumber: get(userData.value, "detail.ceaNumber")
         };
-        avatar = userData.value.avatar;
+        avatar.value = userData.value.avatar.value;
         isLoading.value = false;
       }
     } catch (e) {
@@ -145,17 +156,17 @@ export default defineComponent({
       const res = await mutate(client.value, {
         mutation: UPDATE_USER,
         variables: {
-          id: userId,
+          id: userId.value,
           patch: {
             avatar: file
           }
         },
         ...setHeaderParams("user")
       });
-      const resAvatar = get(res, "data.updateUser.user.avatar");
+      const resAvatar = get(res, "data.updateUser.user.avatar.value");
       if (resAvatar) {
         popUp.value = $_("user.profileupdated");
-        avatar = resAvatar;
+        avatar.value = resAvatar;
       }
     }
   };
@@ -201,7 +212,8 @@ export default defineComponent({
     logout(client.value);
     onClose();
   };
-    return { { isDemo }, client, hasClose, token, userData, isLoading, popUp, isOpenResetPwd, toggleResetPwd, onChangeAvatar, submit, handleLogout }
+
+    return { undefinedundefinedisDemoundefinedundefined, client, hasClose, token, userId, userData, initialValues, isLoading, avatar, popUp, isOpenResetPwd, toggleResetPwd, onChangeAvatar, submit, handleLogout }
   }
 });
 </script>

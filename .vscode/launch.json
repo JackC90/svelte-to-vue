@@ -5,6 +5,22 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Parse files from Svelte to Vue",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "parse",
+        "--",
+        "-s",
+        "sample/source/",
+        "-t",
+        "sample/target/"
+      ]
+    },
+    {
       "type": "node",
       "request": "launch",
       "name": "Launch Program",

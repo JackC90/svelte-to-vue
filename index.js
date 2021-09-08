@@ -1,3 +1,3 @@
-import parseFile from "./src/parser";
+import { processFiles } from "./src/parser.js";
 
-exports.svelteToVue = { parseFile };
+processFiles();

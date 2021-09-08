@@ -1,29 +1,68 @@
 import { parse } from "svelte-parse";
+import yargs from "yargs";
 import { writeToVue } from "./writer.js";
 import fs from "fs";
 import path from "path";
 const __dirname = path.resolve();
 
-const fileUrl = __dirname + "/src/TopBar.svelte"; // provide file location
+const setupYargOptions = () => {
+  const args = process.argv;
+  const yargOptions = yargs(args)
+    .usage("Usage: -s <location> -t <location>")
+    .option("s", {
+      alias: "source",
+      describe: "Source location",
+      type: "string",
+      demandOption: true,
+    })
+    .option("t", {
+      alias: "target",
+      describe: "Target location",
+      type: "string",
+      demandOption: true,
+    })
+    .option("c", {
+      alias: "config",
+      describe: "Config file location",
+      type: "string",
+      demandOption: false,
+    }).argv;
+  return yargOptions;
+};
 
-export const parseFile = (filename, options) => {
-  fs.readFile(filename, "utf8", function (err, data) {
+export const parseFile = (fileName, sourceDir, targetDir, options) => {
+  const sourceFilePath = `${sourceDir}${fileName}`;
+  fs.readFile(sourceFilePath, "utf8", function (err, data) {
     if (err) throw err;
     const result = parse({
       generatePositions: false,
-      ...options,
+      ...(options || null),
       value: data,
     });
 
-    const fn = filename.split(".svelte")[0];
-    const content = writeToVue(fn, result);
+    const fn = fileName.split(".svelte")[0];
     const vFileName = `${fn}.vue`;
+    const targetFilePath = `${targetDir}${vFileName}`;
 
-    fs.writeFile(vFileName, content, (err) => {
+    // Content
+    const content = writeToVue(fn, result);
+
+    fs.writeFile(targetFilePath, content, (err) => {
       if (err) throw err;
-      console.log(`${vFileName} has been saved!`);
+      console.log(`File saved to ${targetFilePath}`);
     });
   });
 };
 
-parseFile(fileUrl);
+export const processFiles = () => {
+  const argv = setupYargOptions();
+  const sourceDir = argv.s;
+  const targetDir = argv.t;
+
+  fs.readdir(sourceDir, function (err, fileNames) {
+    if (err) throw err;
+    fileNames.forEach(function (fileName) {
+      parseFile(fileName, sourceDir, targetDir, {});
+    });
+  });
+};

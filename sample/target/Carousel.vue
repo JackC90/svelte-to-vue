@@ -53,6 +53,7 @@
 <script>
 import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';
 import { _ } from "svelte-i18n";
+
 export default defineComponent({
 
   setup(props) {
