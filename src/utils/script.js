@@ -25,6 +25,14 @@ export function checkBrackets(expr) {
   return holder.length === 0; // return true if length is 0, otherwise false
 }
 
+function cleanStr(value) {
+  if (typeof value === "string") {
+    const cleaned = value.trim().replace(/;$/g, "");
+    return cleaned;
+  }
+  return "";
+}
+
 function printList(array, separator, isIncludeUndefined) {
   if (Array.isArray(array)) {
     const filterLmbd = isIncludeUndefined
@@ -111,7 +119,7 @@ export function parseFunction(line) {
         const def = get(p, `[1]`);
         return {
           block: "method",
-          name,
+          name: cleanStr(name),
           def,
           script: line,
         };
@@ -169,17 +177,17 @@ export function parseProp(line) {
     if (typeof line === "string") {
       const lineTr = line.trim();
       const sngLn = lineTr;
-      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*(.*);/);
+      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*(.*)/);
       // No default value
       if (!prms) {
-        prms = sngLn.match(/^export let (.+);/);
+        prms = sngLn.match(/^export let (.+)/);
       }
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
       return {
         block: "prop",
-        name: name ? name.trim() : name,
-        defaultValue,
+        name: cleanStr(name),
+        defaultValue: cleanStr(defaultValue),
         dataType: getDataType(defaultValue),
         script: line,
       };
@@ -193,12 +201,13 @@ export function parseWatch(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
+      const sngLn = lineTr;
       const isComp = lineTr.match(/\$: (.+)[ \n]*=/);
       let prms;
       let name;
       let expression;
       if (isComp) {
-        prms = sngLn.match(/^\$: (.+)[ \n]*=[ \n]*(.+);/);
+        prms = sngLn.match(/^\$: (.+)[ \n]*=[ \n]*((.|\n|\r)*)/);
         name = get(prms, "[1]");
         expression = get(prms, "[2]");
       } else {
@@ -212,8 +221,8 @@ export function parseWatch(line) {
 
       return {
         block: isComp ? "computed" : "watch",
-        name,
-        expression,
+        name: cleanStr(name),
+        expression: cleanStr(expression),
         script: line,
       };
     }
@@ -230,22 +239,22 @@ export function parseData(line) {
       let prms;
       let ref = true;
       if (sngLn.includes("let ")) {
-        prms = sngLn.match(/^let (.+)[ \n]*=[ \n]*(.*);/);
+        prms = sngLn.match(/^let (.+)[ \r\n]*=[ \r\n]*((.|\n|\r)*)(;$)/);
 
         // States with no default value
         if (!prms) {
-          prms = sngLn.match(/^let (.+);/);
+          prms = sngLn.match(/^let (.+)(;$)/);
         }
       } else if (sngLn.includes("const ")) {
         ref = false;
-        prms = sngLn.match(/^const (.+)[ \n]*=[ \n]*(.*);/);
+        prms = sngLn.match(/^const (.+)[ \r\n]*=[ \r\n]*((.|\n|\r)*)(;$)/);
       }
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
       return {
         block: "data",
-        name,
-        defaultValue,
+        name: cleanStr(name),
+        defaultValue: cleanStr(defaultValue),
         dataType: getDataType(defaultValue),
         script: line,
         ref,
@@ -429,13 +438,16 @@ function replaceStates(content, states) {
       for (let j = 0; j < stateParams.length; j++) {
         const { block, name, dataType } = stateParams[j];
         if (block === "prop" || block === "data") {
-          const reg = new RegExp(`\\b${name}\\b`, "g");
+          const reg = new RegExp(`(?<![\."'\`])\\b${name}\\b`, "g");
           newStr = newStr.replace(reg, `${name}.value`);
 
           // Replace shorthand property assignment
           const nmVal = `${name}.value`;
-          // Semi-colon object property assignment
-          const clReg = new RegExp(`(\\b(${nmVal})(?=:))`, "g");
+          // Object property assignment
+          const clReg = new RegExp(
+            `((\\b(${nmVal})(?=:))|((?<=((const|let|var) +))\\b(${nmVal})))`,
+            "g"
+          );
           newStr = newStr.replace(clReg, `${name}`);
           // Short-hand property assignment
           const shReg = new RegExp(
@@ -443,6 +455,12 @@ function replaceStates(content, states) {
             "g"
           );
           newStr = newStr.replace(shReg, `${name}: ${name}.value`);
+          // Argument assignment
+          const argReg = new RegExp(
+            `((?<=(function\(.*))(${nmVal})(?=(.*\)))|((${nmVal})(?=(.*(\=\>)))))`,
+            "g"
+          );
+          newStr = newStr.replace(argReg, `${name}`);
         }
       }
     }
