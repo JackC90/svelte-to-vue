@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "parse": "node ./index.js",
+    "parse-local": "node ./index.js -- -s sample/source -t sample/target",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -15,7 +16,7 @@
   "author": "JackC90 <jckynchua@yahoo.com>",
   "license": "ISC",
   "dependencies": {
-    "fs": "^0.0.1-security",
+    "fs-extra": "^10.0.0",
     "install": "^0.13.0",
     "lodash.camelcase": "^4.3.0",
     "lodash.get": "^4.4.2",

@@ -9,24 +9,17 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
         "parse",
         "--",
         "-s",
-        "sample/source/",
+        "sample/source",
         "-t",
-        "sample/target/"
+        "sample/target"
       ]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Launch Program",
-      "runtimeExecutable": "node",
-      // "program": "${workspaceFolder}/index.js",
-      "program": "${workspaceFolder}/src/parser.js"
     }
   ]
 }

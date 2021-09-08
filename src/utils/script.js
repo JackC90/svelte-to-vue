@@ -494,76 +494,80 @@ function getReturnVals(blocks) {
 
 export function printScript(parsed) {
   let scrStr = "";
-  // Script tags
-  scrStr += "\n<script>\n";
-  // Import composition API
-  scrStr += `import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';\n`;
+  if (Array.isArray(parsed)) {
+    // Script tags
+    scrStr += "\n<script>\n";
+    // Import composition API
+    scrStr += `import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';\n`;
 
-  // Imports
-  let imports = [];
-  let otherScripts = [];
-  let props = [];
-  let data = [];
+    // Imports
+    let imports = [];
+    let otherScripts = [];
+    let props = [];
+    let data = [];
 
-  parsed.forEach((p) => {
-    if (p.block === "import") {
-      imports.push(p);
-    } else if (p.block === "prop") {
-      props.push(p);
-    } else {
-      if (p.block === "data") {
-        data.push(p);
+    parsed.forEach((p) => {
+      if (p.block === "import") {
+        imports.push(p);
+      } else if (p.block === "prop") {
+        props.push(p);
+      } else {
+        if (p.block === "data") {
+          data.push(p);
+        }
+        otherScripts.push(p);
       }
-      otherScripts.push(p);
-    }
-  });
-  // Imports components
-  imports.forEach((i) => {
-    scrStr += `${i.script.trim()}\n`;
-  });
+    });
+    // Imports components
+    imports.forEach((i) => {
+      scrStr += `${i.script.trim()}\n`;
+    });
 
-  // Setup ----- Start
-  scrStr += `\nexport default defineComponent({\n
+    // Setup ----- Start
+    scrStr += `\nexport default defineComponent({\n
   setup(${props.length ? "props" : ""}) {\n`;
 
-  const sp = "    ";
+    const sp = "    ";
 
-  let bodyScr = "";
+    let bodyScr = "";
 
-  bodyScr += props.length
-    ? `${sp}const { ${props.map((p) => p.name).join(", ")} } = toRefs(props);\n`
-    : "";
-  if (parsed) {
-    // State changes (refs)
-    const states = { props, data };
+    bodyScr += props.length
+      ? `${sp}const { ${props
+          .map((p) => p.name)
+          .join(", ")} } = toRefs(props);\n`
+      : "";
+    if (parsed) {
+      // State changes (refs)
+      const states = { props, data };
 
-    for (let i = 0; i < otherScripts.length; i++) {
-      const el = otherScripts[i];
-      if (el.block === "data") {
-        const { name, defaultValue, dataType, ref: dataRef } = el;
-        const ref = dataRef ? "ref" : "";
-        bodyScr += `${sp}const ${name}${
-          ref || defaultValue
-            ? ` = ${ref}${ref ? "(" : ""}${
-                dataRef && !(defaultValue || defaultValue === "undefined")
-                  ? ""
-                  : defaultValue
-              }${ref ? ")" : ""}`
-            : ""
-        };\n`;
-      } else if (el.block === "method" || el.block === "hook") {
-        bodyScr += `\n${sp}${getFunction(el, states)}\n`;
-      } else if (el.block === "computed" || el.block === "watch") {
-        bodyScr += `\n${sp}${getWatch(el, states)}\n`;
+      for (let i = 0; i < otherScripts.length; i++) {
+        const el = otherScripts[i];
+        if (el.block === "data") {
+          const { name, defaultValue, dataType, ref: dataRef } = el;
+          const ref = dataRef ? "ref" : "";
+          bodyScr += `${sp}const ${name}${
+            ref || defaultValue
+              ? ` = ${ref}${ref ? "(" : ""}${
+                  dataRef && !(defaultValue || defaultValue === "undefined")
+                    ? ""
+                    : defaultValue
+                }${ref ? ")" : ""}`
+              : ""
+          };\n`;
+        } else if (el.block === "method" || el.block === "hook") {
+          bodyScr += `\n${sp}${getFunction(el, states)}\n`;
+        } else if (el.block === "computed" || el.block === "watch") {
+          bodyScr += `\n${sp}${getWatch(el, states)}\n`;
+        }
       }
     }
+    bodyScr += `\n${sp}${getReturnVals(parsed)}`;
+
+    scrStr += `${bodyScr}\n  }\n`;
+    // Setup ----- End
+
+    scrStr += `});\n`;
+    scrStr += "</script>";
   }
-  bodyScr += `\n${sp}${getReturnVals(parsed)}`;
-
-  scrStr += `${bodyScr}\n  }\n`;
-  // Setup ----- End
-
-  scrStr += `});\n`;
-  scrStr += "</script>";
   return scrStr;
 }
