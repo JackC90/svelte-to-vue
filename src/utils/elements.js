@@ -190,6 +190,7 @@ export function printSvEl(el, initialString) {
     str += elStr;
   } else if (type === "svelteBranchingBlock") {
     if (ifBlockNames.includes(name)) {
+      // #if, :else, :else if / v-if Block
       if (get(branches, "length")) {
         for (let i = 0; i < branches.length; i++) {
           const branch = branches[i];
@@ -198,20 +199,61 @@ export function printSvEl(el, initialString) {
             children: brChildren,
             name: brName,
           } = branch;
+          const elNum = get(
+            brChildren.filter(
+              (ch) =>
+                (ch.type === "svelteElement" ||
+                  ch.type === "svelteComponent") &&
+                !ch.selfClosing
+            ),
+            "length",
+            0
+          );
+          const isSingleEl = elNum === 1;
           const repPropName = ifBlocks[brName];
           const brExprVal = get(brExpression, "value");
-          str += `<template v-${repPropName}${
-            brExprVal ? `="${brExprVal}"` : ""
-          }>`;
+          let ifBlStr = "";
+          // Get each children
           if (get(brChildren, "length")) {
             brChildren.forEach((ch) => {
-              str += printSvEl(ch);
+              const vIfParams = isSingleEl
+                ? {
+                    type: "svelteDirective",
+                    name: `v-${repPropName}`,
+                    value: [
+                      {
+                        type: "svelteDynamicContent",
+                        expression: {
+                          type: "svelteExpression",
+                          value: brExprVal,
+                        },
+                      },
+                    ],
+                    modifiers: [],
+                    shorthand: "none",
+                  }
+                : null;
+              if (!Array.isArray(ch.properties)) {
+                ch.properties = [];
+              }
+
+              if (isSingleEl) {
+                ch.properties.push(vIfParams);
+              }
+              ifBlStr += printSvEl(ch);
             });
           }
-          str += `</template>`;
+
+          if (!isSingleEl) {
+            ifBlStr = `<template v-${repPropName}${
+              brExprVal ? `="${brExprVal}"` : ""
+            }>\n${ifBlStr}\n</template>`;
+          }
+          str += ifBlStr;
         }
       }
     } else if (name === "each") {
+      // `#each` / `v-for` Block
       if (get(branches, "length")) {
         for (let i = 0; i < branches.length; i++) {
           const branch = branches[i];
@@ -220,7 +262,9 @@ export function printSvEl(el, initialString) {
           const elNum = get(
             brChildren.filter(
               (ch) =>
-                ch.type === "svelteElement" || ch.type === "svelteComponent"
+                (ch.type === "svelteElement" ||
+                  ch.type === "svelteComponent") &&
+                !ch.selfClosing
             ),
             "length",
             0
@@ -236,6 +280,7 @@ export function printSvEl(el, initialString) {
               if (
                 (ch.type === "svelteElement" ||
                   ch.type === "svelteComponent") &&
+                !ch.selfClosing &&
                 !get(ch, "properties", empty).find((pr) => pr.name === "key")
               ) {
                 const key = {
@@ -256,9 +301,8 @@ export function printSvEl(el, initialString) {
                   modifiers: [],
                   shorthand: "none",
                 };
-                if (Array.isArray(ch.properties)) {
-                  if (isSingleEl) {
-                    ch.properties.push({
+                const vForParams = isSingleEl
+                  ? {
                       type: "svelteDirective",
                       name: "v-for",
                       value: [
@@ -272,12 +316,16 @@ export function printSvEl(el, initialString) {
                       ],
                       modifiers: [],
                       shorthand: "none",
-                    });
-                  }
-                  ch.properties.push(key);
-                } else {
-                  ch.properties = [key];
+                    }
+                  : null;
+                if (!Array.isArray(ch.properties)) {
+                  ch.properties = [];
                 }
+
+                if (isSingleEl) {
+                  ch.properties.push(vForParams);
+                }
+                ch.properties.push(key);
                 svelteCmpCount += 1;
               }
               blockStr += printSvEl(ch, null, {
