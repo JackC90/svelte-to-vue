@@ -1,5 +1,6 @@
 node_modules
 
 sample/misc
+sample/_source
 sample/source/*
 sample/target/*

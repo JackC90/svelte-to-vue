@@ -25,6 +25,16 @@ export function checkBrackets(expr) {
   return holder.length === 0; // return true if length is 0, otherwise false
 }
 
+function printList(array, separator, isIncludeUndefined) {
+  if (Array.isArray(array)) {
+    const filterLmbd = isIncludeUndefined
+      ? (a) => a
+      : (a) => a && a !== "undefined";
+    return array.filter(filterLmbd).join(separator || ", ");
+  }
+  return "";
+}
+
 // Hooks
 export const HOOKS = {
   onMount: "onMounted",
@@ -138,14 +148,16 @@ export function getDataType(value) {
   if (typeof value === "string") {
     if (value.match(/^["']|["']$/)) {
       dataType = "String";
-    } else if (!isNaN(value)) {
-      dataType = "Number";
-    } else if (value.match(/^\[|\]$/)) {
-      dataType = "Array";
-    } else if (value.match(/^\{|\}$/)) {
-      dataType = "Object";
     } else if (value === "true" || value === "false") {
       dataType = "Boolean";
+    } else if (!isNaN(value)) {
+      dataType = "Number";
+    } else if (value.match(/(\=\>)/) || value.match(/(function)/)) {
+      dataType = "Function";
+    } else if (value.match(/^\[(.*)\]$/)) {
+      dataType = "Array";
+    } else if (value.match(/^\{(.*)\}$/)) {
+      dataType = "Object";
     } else if (value === "null") {
     }
   }
@@ -156,13 +168,17 @@ export function parseProp(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
-      const sngLn = lineTr.replace("\n", "");
-      const prms = sngLn.match(/^export let (.+) = (.+);/);
+      const sngLn = lineTr;
+      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*(.*);/);
+      // No default value
+      if (!prms) {
+        prms = sngLn.match(/^export let (.+);/);
+      }
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
       return {
         block: "prop",
-        name,
+        name: name ? name.trim() : name,
         defaultValue,
         dataType: getDataType(defaultValue),
         script: line,
@@ -177,16 +193,16 @@ export function parseWatch(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
-      const isComp = lineTr.match(/\$: (.+) =/);
+      const isComp = lineTr.match(/\$: (.+)[ \n]*=/);
       let prms;
       let name;
       let expression;
       if (isComp) {
-        prms = sngLn.match(/^\$: (.+) = (.+);/);
+        prms = sngLn.match(/^\$: (.+)[ \n]*=[ \n]*(.+);/);
         name = get(prms, "[1]");
         expression = get(prms, "[2]");
       } else {
-        let exp = lineTr.replace(/^\$: */g, "");
+        let exp = lineTr.replace(/^\$:[ \n]*/g, "");
         if (exp.match(/^\{.*\}$/g)) {
           expression = `() => ${exp}`;
         } else if (checkBrackets(exp)) {
@@ -210,11 +226,11 @@ export function parseData(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
-      const sngLn = lineTr.replace("\n", "");
+      const sngLn = lineTr;
       let prms;
       let ref = true;
       if (sngLn.includes("let ")) {
-        prms = sngLn.match(/^let (.+) = (.+);/);
+        prms = sngLn.match(/^let (.+)[ \n]*=[ \n]*(.*);/);
 
         // States with no default value
         if (!prms) {
@@ -222,7 +238,7 @@ export function parseData(line) {
         }
       } else if (sngLn.includes("const ")) {
         ref = false;
-        prms = sngLn.match(/^const (.+) = (.+);/);
+        prms = sngLn.match(/^const (.+)[ \n]*=[ \n]*(.*);/);
       }
       const name = get(prms, "[1]");
       const defaultValue = get(prms, "[2]");
@@ -435,6 +451,26 @@ function replaceStates(content, states) {
   return "";
 }
 
+function getPropOpts(props) {
+  let propOptsStr = "";
+  if (Array.isArray(props)) {
+    const propOpts = [];
+    props.forEach((prop) => {
+      const { dataType, defaultValue, name } = prop;
+      const typeStr =
+        dataType && dataType !== "undefined" ? `type: ${dataType}` : "";
+      const defaultStr =
+        defaultValue && defaultValue !== "undefined"
+          ? `default: ${defaultValue}`
+          : "";
+      propOpts.push(`${name}: { ${printList([typeStr, defaultStr])} }`);
+    });
+    propOptsStr = `props: {\n${printList(propOpts, ",\n")}\n}`;
+    return propOptsStr;
+  }
+  return propOptsStr;
+}
+
 function getFunction(blockParams, states) {
   if (blockParams) {
     const { block, hookKey, hookVal, script, name, def } = blockParams;
@@ -474,7 +510,7 @@ function getReturnVals(blocks) {
       .map((bl) => {
         const blTr = bl.name ? bl.name.trim() : "";
         if (blTr.match(/^[\{\[].*[\]\}]$/g)) {
-          const spread = (blTr.replace(/[\{\[)\]\} \n]/g) || "")
+          const spread = (blTr.replace(/[\{\[\]\} \n]/g, "") || "")
             .split(",")
             .filter((val) => val && val !== "null" && val !== "undefined")
             .map((val) => val.trim())
@@ -498,7 +534,7 @@ export function printScript(parsed) {
     // Script tags
     scrStr += "\n<script>\n";
     // Import composition API
-    scrStr += `import { defineComponent, ref, reactive, toRefs } from '@nuxtjs/composition-api';\n`;
+    scrStr += `import { defineComponent, ref, toRefs } from '@nuxtjs/composition-api';\n`;
 
     // Imports
     let imports = [];
@@ -522,12 +558,14 @@ export function printScript(parsed) {
     imports.forEach((i) => {
       scrStr += `${i.script.trim()}\n`;
     });
+    const sp = "    ";
+    // Vue ----- Start
+    scrStr += `\nexport default defineComponent({\n`;
+    // Props
+    scrStr += `${sp}${getPropOpts(props)},`;
 
     // Setup ----- Start
-    scrStr += `\nexport default defineComponent({\n
-  setup(${props.length ? "props" : ""}) {\n`;
-
-    const sp = "    ";
+    scrStr += `\n${sp}setup(${props.length ? "props" : ""}) {\n`;
 
     let bodyScr = "";
 
@@ -536,7 +574,7 @@ export function printScript(parsed) {
           .map((p) => p.name)
           .join(", ")} } = toRefs(props);\n`
       : "";
-    if (parsed) {
+    if (Array.isArray(otherScripts)) {
       // State changes (refs)
       const states = { props, data };
 
