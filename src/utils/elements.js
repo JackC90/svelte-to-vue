@@ -18,22 +18,25 @@ function printProperties(properties) {
       if (types.includes(type)) {
         if (name) {
           // Name
+          let varName = "";
           const isDynamic = get(value, "[0].expression");
           if (type === "svelteDirective") {
             if (name === "on") {
-              str += ` @${specifier}`;
+              varName += `@${specifier}`;
+            } else if (name.match(/^v-.+/g)) {
+              varName += `${name}`;
             } else if (name === "let") {
               // Slot params
               slotVars.push(specifier);
             } else {
-              str += ` :${specifier}`;
+              varName += `:${specifier}`;
             }
           } else if (shorthand === "expression" && name.match(/^\.\.\.(.+)$/)) {
             // Destructuring
-            str += ` v-bind`;
+            varName += `v-bind`;
           } else if (name !== "slot") {
             // Other properties
-            str += ` ${isDynamic ? ":" : ""}${name}`;
+            varName += `${isDynamic ? ":" : ""}${name}`;
           }
           // Slot - move to parent
           if (type === "svelteProperty" && name === "slot") {
@@ -57,7 +60,9 @@ function printProperties(properties) {
                 valStr += val;
               }
             });
-            str += valStr ? `="${valStr}"` : ``;
+            if (varName && valStr) {
+              str += valStr ? ` ${varName} = "${valStr}"` : ` ${varName}`;
+            }
           }
         }
       }
@@ -212,7 +217,17 @@ export function printSvEl(el, initialString) {
           const branch = branches[i];
           const { expression: brExpression, children: brChildren } = branch;
           const exp = parseEachExp(get(brExpression, "value"));
-          str += `<template v-for="${get(exp, "exp", "")}">`;
+          const elNum = get(
+            brChildren.filter(
+              (ch) =>
+                ch.type === "svelteElement" || ch.type === "svelteComponent"
+            ),
+            "length",
+            0
+          );
+          const isSingleEl = elNum === 1;
+
+          let blockStr = "";
           let svelteCmpCount = 0;
           if (get(brChildren, "length")) {
             for (let i = 0; i < brChildren.length; i++) {
@@ -242,16 +257,40 @@ export function printSvEl(el, initialString) {
                   shorthand: "none",
                 };
                 if (Array.isArray(ch.properties)) {
+                  if (isSingleEl) {
+                    ch.properties.push({
+                      type: "svelteDirective",
+                      name: "v-for",
+                      value: [
+                        {
+                          type: "svelteDynamicContent",
+                          expression: {
+                            type: "svelteExpression",
+                            value: get(exp, "exp", ""),
+                          },
+                        },
+                      ],
+                      modifiers: [],
+                      shorthand: "none",
+                    });
+                  }
                   ch.properties.push(key);
                 } else {
                   ch.properties = [key];
                 }
                 svelteCmpCount += 1;
               }
-              str += printSvEl(ch);
+              blockStr += printSvEl(ch, null, {
+                tagInner: [""],
+              });
             }
           }
-          str += `</template>`;
+          // Wrap in <template> if multiple child elements
+          if (!isSingleEl) {
+            const vFor = `v-for="${get(exp, "exp", "")}"`;
+            blockStr = `<template ${vFor}>\n${blockStr}\n</template>`;
+          }
+          str += blockStr;
         }
       }
     }
