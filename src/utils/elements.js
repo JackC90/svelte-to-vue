@@ -19,7 +19,12 @@ function printProperties(properties) {
         if (name) {
           // Name
           let varName = "";
-          const isDynamic = get(value, "[0].expression");
+          const isDynamic = !!(
+            Array.isArray(value) && value.find(v => v.expression)
+          );
+          const isInterpolatedText =
+            isDynamic &&
+            !!(Array.isArray(value) && value.find(v => v.type === "text"));
           if (type === "svelteDirective") {
             if (name === "on") {
               varName += `@${specifier}`;
@@ -45,6 +50,7 @@ function printProperties(properties) {
           // Value
           let valStr = "";
           if (name !== "slot") {
+            // Iterate each value
             value.forEach(({ type, value, expression }) => {
               if (type === "text") {
                 valStr += value;
@@ -57,11 +63,13 @@ function printProperties(properties) {
                   const destruct = get(matches, "[1]");
                   val = destruct ? destruct : val;
                 }
+                val = isInterpolatedText ? `\$\{${val}\}` : val;
                 valStr += val;
               }
             });
+            valStr = isInterpolatedText ? `\`${valStr}\`` : valStr;
             if (varName && valStr) {
-              str += valStr ? ` ${varName} = "${valStr}"` : ` ${varName}`;
+              str += valStr ? ` ${varName}="${valStr}"` : ` ${varName}`;
             }
           }
         }
@@ -87,7 +95,7 @@ const ifBlocks = {
 };
 const ifBlockNames = Object.keys(ifBlocks);
 
-const parseEachExp = (eachExp) => {
+const parseEachExp = eachExp => {
   if (typeof eachExp === "string") {
     let key;
     let exp = "";
@@ -98,7 +106,7 @@ const parseEachExp = (eachExp) => {
     if (!item) {
       return null;
     }
-    item.split(/[, ]/).forEach((w) => {
+    item.split(/[, ]/).forEach(w => {
       const wt = w.trim();
       if (wt) {
         // Value in brackets are keys
@@ -201,10 +209,10 @@ export function printSvEl(el, initialString) {
           } = branch;
           const elNum = get(
             brChildren.filter(
-              (ch) =>
-                (ch.type === "svelteElement" ||
-                  ch.type === "svelteComponent") &&
-                !ch.selfClosing
+              ch =>
+                ch.type === "svelteElement" ||
+                ch.type === "svelteComponent" ||
+                ch.type === "svelteBranchingBlock"
             ),
             "length",
             0
@@ -215,7 +223,7 @@ export function printSvEl(el, initialString) {
           let ifBlStr = "";
           // Get each children
           if (get(brChildren, "length")) {
-            brChildren.forEach((ch) => {
+            brChildren.forEach(ch => {
               const vIfParams = isSingleEl
                 ? {
                     type: "svelteDirective",
@@ -261,10 +269,10 @@ export function printSvEl(el, initialString) {
           const exp = parseEachExp(get(brExpression, "value"));
           const elNum = get(
             brChildren.filter(
-              (ch) =>
-                (ch.type === "svelteElement" ||
-                  ch.type === "svelteComponent") &&
-                !ch.selfClosing
+              ch =>
+                ch.type === "svelteElement" ||
+                ch.type === "svelteComponent" ||
+                ch.type === "svelteBranchingBlock"
             ),
             "length",
             0
@@ -281,7 +289,7 @@ export function printSvEl(el, initialString) {
                 (ch.type === "svelteElement" ||
                   ch.type === "svelteComponent") &&
                 !ch.selfClosing &&
-                !get(ch, "properties", empty).find((pr) => pr.name === "key")
+                !get(ch, "properties", empty).find(pr => pr.name === "key")
               ) {
                 const key = {
                   type: "svelteProperty",

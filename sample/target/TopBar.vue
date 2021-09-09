@@ -18,55 +18,46 @@
         </a>
 
         <div class="flex items-center h-full mx-20px">
-          <template v-for="section in menu">
-            <template v-for="sectionItem in section">
-              <template
-                v-if="
-                  !sectionItem.hideDesktop &&
-                  (showHiddenFeatures || !sectionItem.isHidden)
-                "
-              >
-                <a
-                  :href="sectionItem.href"
-                  :class="`button-simple mr-10px ${
-                    getRouteName($location) === sectionItem.href
-                      ? 'text-primary title-4'
-                      : 'text-fade-gray body-4'
-                  }`"
-                  v-if="sectionItem.href"
-                >
-                  {{ sectionItem.label }}
-                </a>
+          <a
+            :href="sectionItem.href"
+            :class="`button-simple mr-10px ${
+              getRouteName($location) === sectionItem.href
+                ? 'text-primary title-4'
+                : 'text-fade-gray body-4'
+            }`"
+            v-if="sectionItem.href"
+          >
+            {{ sectionItem.label }}
+          </a>
 
-                <InputSelect
-                  :items="sectionItem.items"
-                  class="h-full mr-10px"
-                  classInputWrapperContainer="h-full"
-                  classInputWrapper="h-full"
-                  classInput="h-full items-center"
-                  classInputSelect="bg-primary"
-                  layout="relative"
-                  :arrow="false"
-                  :empty="true"
-                  :onChange="null"
-                >
-                  <div class="text-fade-gray body-4">
-                    {{ sectionItem.label }}
-                  </div>
+          <InputSelect
+            :items="sectionItem.items"
+            class="h-full mr-10px"
+            classInputWrapperContainer="h-full"
+            classInputWrapper="h-full"
+            classInput="h-full items-center"
+            classInputSelect="bg-primary"
+            layout="relative"
+            :arrow="false"
+            :empty="true"
+            :onChange="null"
+          >
+            <div class="text-fade-gray body-4">
+              {{ sectionItem.label }}
+            </div>
 
-                  <template #select-item="{ item, i }"
-                    ><a :href="item.href">
-                      <div class="text-white m-10px button-simple">
-                        {{ $_(item.label) }}
-                        <template v-if="i !== sectionItem.items.length - 1">
-                          <hr class="divider-primary-white my-10px" />
-                        </template>
-                      </div> </a
-                  ></template>
-                </InputSelect>
-              </template>
-            </template>
-          </template>
+            <template #select-item="{ item, i }"
+              ><a :href="item.href">
+                <div class="text-white m-10px button-simple">
+                  {{ $_(item.label) }}
+
+                  <hr
+                    class="divider-primary-white my-10px"
+                    v-if="i !== sectionItem.items.length - 1"
+                  />
+                </div> </a
+            ></template>
+          </InputSelect>
         </div>
 
         <button
@@ -81,8 +72,8 @@
       <div class="flex items-center">
         <InputSelect
           :items="languages"
-          :initialValue="languages.find((element) => element.id === $locale)"
-          :onChange="(value) => onChangeLang(value.value)"
+          :initialValue="languages.find(element => element.id === $locale)"
+          :onChange="value => onChangeLang(value.value)"
           class="h-full mr-20px"
           classInputWrapperContainer="h-full"
           classInputWrapper="h-full"
@@ -102,9 +93,11 @@
           <template #select-item="{ item, i }"
             ><div class="text-white m-10px button-simple">
               {{ $_(item.label) }}
-              <template v-if="i !== languages.length - 1">
-                <hr class="divider-primary-white my-10px" />
-              </template></div
+
+              <hr
+                class="divider-primary-white my-10px"
+                v-if="i !== languages.length - 1"
+              /></div
           ></template>
         </InputSelect>
 
@@ -126,9 +119,8 @@
         />
       </a>
 
-      <template v-if="getRouteName($location) !== '/'">
-        <div />
-      </template>
+      <div v-if="getRouteName($location) !== '/'" />
+
       <button
         @click="() => navigate(getAppendQsRoute({ search: null }))"
         class="button-simple menu-button-close"
@@ -147,24 +139,9 @@
   </div>
 
   <div
-    class="
-      menu-mobile
-      bg-fade-blue
-      overflow-auto
-      fixed
-      py-20px
-      z-50
-      w-full
-      inset-y-0
-      transition-all
-      flex flex-col
-      justify-between
-      getQsParams($location).menu
-      ?
-      'left-0'
-      :
-      '-left-1'
-    "
+    :class="`menu-mobile bg-fade-blue overflow-auto fixed py-20px z-50 w-full inset-y-0 transition-all flex flex-col justify-between ${
+      getQsParams($location).menu ? 'left-0' : '-left-1'
+    }`"
     v-if="!$isLg"
   >
     <div>
@@ -198,7 +175,15 @@
         </div>
 
         <div
-          class="flex items-center  rounded-r-15px px-20px py-10px mr-20px bg-primary"
+          class="
+            flex
+            items-center
+            rounded-r-15px
+            px-20px
+            py-10px
+            mr-20px
+            bg-primary
+          "
           @click="
             () =>
               navigate(
@@ -242,9 +227,9 @@
 
         <InputSelect
           :items="languages"
-          :initialValue="languages.find((element) => element.id === $locale)"
+          :initialValue="languages.find(element => element.id === $locale)"
           class="m-10px"
-          :onChange="(value) => onChangeLang(value.value)"
+          :onChange="value => onChangeLang(value.value)"
         >
           <template #selected-item="{ item }"
             ><div class="flex items-center body-3 text-primary">
@@ -266,44 +251,39 @@
 
         <template v-for="section in menu">
           <hr class="divider-fade-gray my-10px" />
-          <template v-for="item in section">
-            <template
-              v-if="!item.hideMobile && (showHiddenFeatures || !item.isHidden)"
-            >
-              <a
-                :href="item.href"
-                class="flex items-center btn m-10px body-3 text-primary"
-                v-if="item.href"
-              >
-                <img :src="item.src" :alt="item.alt" class="mr-20px" />
-                <div>{{ item.label }}</div>
-              </a>
 
-              <InputSelect
-                :items="item.items"
-                class="m-10px"
-                :empty="true"
-                :onChange="null"
-              >
-                <div class="flex items-center body-3 text-primary">
-                  <img
-                    :src="item.src"
-                    class="w-40px h-40px mr-20px"
-                    :alt="item.label"
-                  />
-                  {{ item.label }}
+          <a
+            :href="item.href"
+            class="flex items-center btn m-10px body-3 text-primary"
+            v-if="item.href"
+          >
+            <img :src="item.src" :alt="item.alt" class="mr-20px" />
+            <div>{{ item.label }}</div>
+          </a>
+
+          <InputSelect
+            :items="item.items"
+            class="m-10px"
+            :empty="true"
+            :onChange="null"
+          >
+            <div class="flex items-center body-3 text-primary">
+              <img
+                :src="item.src"
+                class="w-40px h-40px mr-20px"
+                :alt="item.label"
+              />
+              {{ item.label }}
+            </div>
+
+            <template #select-item="{ item }"
+              ><a :href="item.href">
+                <div class="ml-60px mb-10px body-3 text-primary">
+                  {{ $_(item.label) }}
                 </div>
-
-                <template #select-item="{ item }"
-                  ><a :href="item.href">
-                    <div class="ml-60px mb-10px body-3 text-primary">
-                      {{ $_(item.label) }}
-                    </div>
-                  </a></template
-                >
-              </InputSelect>
-            </template>
-          </template>
+              </a></template
+            >
+          </InputSelect>
         </template>
       </div>
     </div>
@@ -312,7 +292,19 @@
   </div>
 
   <div
-    class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between bg-white  shadow-above p-20px install"
+    class="
+      fixed
+      inset-x-0
+      bottom-0
+      z-30
+      flex
+      items-center
+      justify-between
+      bg-white
+      shadow-above
+      p-20px
+      install
+    "
     v-if="!$isLg && showInstall"
   >
     <button
@@ -480,7 +472,7 @@ export default defineComponent({
 
     function installApp() {
       deferredPrompt.value.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {
+      deferredPrompt.userChoice.then(choiceResult => {
         if (choiceResult.outcome === "accepted") {
           showInstall.value = false;
         }
@@ -489,7 +481,7 @@ export default defineComponent({
       });
     }
 
-    const onChangeLang = (newValue) => {
+    const onChangeLang = newValue => {
       setupI18n({ withLocale: newValue });
       onSwitchLang.value(newValue);
     };
