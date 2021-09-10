@@ -42,7 +42,7 @@ onSwitchLang: { type: Function, default: () => {} }
     const version = config.version || "";
     const { showHiddenFeatures } = config;
 
-    const menu = computed([
+    const menu = computed(() => [
     [
       {
         label: $_("menu.map"),

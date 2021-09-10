@@ -191,7 +191,7 @@ export function parseProp(line) {
     if (typeof line === "string") {
       const lineTr = line.trim();
       const sngLn = lineTr;
-      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*((.|\n|\r)*)/);
+      let prms = sngLn.match(/^export let (.+)[ \n]+=[^>][ \n]*((.|\n|\r)*)/);
       // No default value
       if (!prms) {
         prms = sngLn.match(/^export let (.+)/);
@@ -216,16 +216,19 @@ export function parseWatch(line) {
     if (typeof line === "string") {
       const lineTr = line.trim();
       const sngLn = lineTr;
-      const isComp = lineTr.match(/\$: (.+)[ \n]*=/);
+      const isComp = !!lineTr.match(/\$: (.+)[ \n]+=/);
       let prms;
       let name;
       let expression;
       if (isComp) {
-        prms = sngLn.match(/^\$: (.+)[ \n]*=[ \n]*((.|\n|\r)*)/);
+        prms = sngLn.match(/^\$: (.+)[ \n]+=[ \n]+((.|\n|\r)*)/);
         name = get(prms, "[1]");
         expression = get(prms, "[2]");
+        if (!(expression.match(/\=\>/) || expression.match(/function/))) {
+          expression = `() => ${expression}`;
+        }
       } else {
-        let exp = lineTr.replace(/^\$:[ \n]*/g, "");
+        let exp = lineTr.replace(/^\$:[ \n]+/g, "");
         if (exp.match(/^\{(.|\n|\r)*\}$/g)) {
           expression = `() => ${exp}`;
         } else if (checkBrackets(exp)) {
@@ -452,7 +455,7 @@ function replaceStates(content, states) {
       for (let j = 0; j < stateParams.length; j++) {
         const { block, name, dataType } = stateParams[j];
         if (block === "prop" || block === "data") {
-          const reg = new RegExp(`(?<![\."'\`])\\b${name}\\b`, "g");
+          const reg = new RegExp(`(?<![\.\"\'\`])\\b${name}\\b`, "g");
           newStr = newStr.replace(reg, `${name}.value`);
 
           // Replace shorthand property assignment
