@@ -2,7 +2,7 @@ import get from "lodash.get";
 import { printSvEl } from "./utils/elements.js";
 import { parseScript, printScript } from "./utils/script.js";
 
-export function writeToVue(name, schema) {
+export function writeToVue(name, schema, config) {
   if (get(schema, "type") === "root") {
     const children = get(schema, "children");
 
@@ -26,7 +26,7 @@ export function writeToVue(name, schema) {
     });
     scripts.forEach(script => {
       const parsedScripts = parseScript(script);
-      scriptStr += `\n${printScript(parsedScripts)}\n`;
+      scriptStr += `\n${printScript(parsedScripts, config)}\n`;
     });
 
     const elements = children.filter(child => {

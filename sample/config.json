@@ -1,0 +1,22 @@
+{
+  "aliases": {
+    "@cmpnts/": "@/components/"
+  },
+  "folders": {
+    "@utils": "plugins",
+    "@stores": "stores"
+  },
+  "plugins": [
+    {
+      "svelte": "svelte-i18n",
+      "vue": "$i18n",
+      "vars": {
+        "$_": "t"
+      }
+    },
+    {
+      "svelte": "router",
+      "vueHelper": "useRouter"
+    }
+  ]
+}

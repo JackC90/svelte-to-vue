@@ -100,6 +100,7 @@ export function parseImport(line) {
 
     const libMtc = sngLn.match(/ from ["'](.+)["'];$/);
     let lib = get(libMtc, "[1]", "");
+    const path = lib;
     let category = get(lib.match("^@[a-zA-Z0-9]*"), "[0]");
     lib = lib.split("/");
     lib = get(lib, `[${lib.length - 1}]`);
@@ -110,6 +111,7 @@ export function parseImport(line) {
       defaultVars,
       vars,
       lib,
+      path,
       type,
       category,
       script: line,
@@ -486,6 +488,55 @@ function replaceStates(content, states) {
   return "";
 }
 
+function getContextVars(imports, config) {
+  const plugins = [];
+  const components = [];
+  const stores = [];
+  if (Array.isArray(imports)) {
+    const aliases = get(config, "aliases");
+    const aliasKeys = (aliases && Object.keys(aliases)) || [];
+    const pluginsConf = get(config, "plugins");
+
+    imports.forEach(imp => {
+      const { type, category, script, defaultVars, vars, lib, path } = imp;
+      if (type === "library") {
+        if (category === "@utils") {
+          // Plugins
+          const conf = pluginsConf.find(pc => pc.svelte === lib);
+          plugins.push({
+            name: get(conf, "vue", lib),
+            vars: get(conf, "vars", vars),
+            category,
+            feature: "plugin",
+          });
+        } else if (category === "@stores") {
+          // Stores
+          stores.push({
+            name: lib,
+            vars,
+            category,
+          });
+        }
+      } else if (type === "svelteComponent") {
+        // Svelte Components - replace with vue
+        let vScript = path;
+        aliasKeys.forEach(aliasKey => {
+          const alias = aliases[aliasKey];
+          vScript = vScript.replace(aliasKey, alias);
+        });
+        vScript = vScript.replace(/\.svelte/g, ".vue");
+        components.push({
+          defaultVars,
+          vars,
+          path: vScript,
+        });
+      }
+    });
+    return { plugins, components, stores };
+  }
+  return { plugins, components, stores };
+}
+
 function getPropOpts(props) {
   let propOptsStr = "";
   if (Array.isArray(props)) {
@@ -563,13 +614,32 @@ function getReturnVals(blocks) {
   return "return {}";
 }
 
-export function printScript(parsed) {
+export function printScript(parsed, config) {
   let scrStr = "";
   if (Array.isArray(parsed)) {
     // Script tags
     scrStr += "\n<script>\n";
     // Import composition API
-    scrStr += `import { defineComponent, ref, toRefs } from '@nuxtjs/composition-api';\n`;
+    const requiredFeatures = ["defineComponent", "ref", "toRefs"];
+    // - Hooks
+    parsed.forEach(p => {
+      if (p.hookVal) {
+        requiredFeatures.push(p.hookVal);
+      } else if (
+        p.category === "@utils" &&
+        !requiredFeatures.includes("useContext")
+      ) {
+        requiredFeatures.push("useContext");
+      } else if (
+        p.category === "@stores" &&
+        !requiredFeatures.includes("useStore")
+      ) {
+        requiredFeatures.push("useStore");
+      }
+    });
+    scrStr += `import { ${requiredFeatures.join(
+      ", "
+    )} } from '@nuxtjs/composition-api';\n`;
 
     // Imports
     let imports = [];
@@ -590,9 +660,21 @@ export function printScript(parsed) {
       }
     });
     // Imports components
-    imports.forEach(i => {
-      scrStr += `${i.script.trim()}\n`;
+    // Convert imports to Vue format
+    const {
+      plugins: vuePlugins,
+      components: vueComps,
+      stores: vueStores,
+    } = getContextVars(imports, config);
+    vueComps.forEach(i => {
+      const items = [i.defaultVars.join(", ")];
+      if (i.vars && i.vars.length) {
+        items.push(`{ ${i.vars.join(", ")} }`);
+      }
+      scrStr += `import ${items.join(", ")} from "${i.path}";\n`;
     });
+
+    // Indent
     const sp = "    ";
     // Vue ----- Start
     scrStr += `\nexport default defineComponent({\n`;
@@ -604,6 +686,22 @@ export function printScript(parsed) {
 
     let bodyScr = "";
 
+    // Context - plugins
+    bodyScr += vuePlugins.length
+      ? `\nconst { ${vuePlugins
+          .map(p => p.name)
+          .join(", ")} } = useContext();\n`
+      : "";
+    let plScr = "";
+    vuePlugins.forEach(pl => {
+      plScr +=
+        pl.vars && pl.vars.length
+          ? `${sp}const { ${pl.vars.join(", ")} } = ${pl.name};\n`
+          : "";
+    });
+    bodyScr += plScr;
+
+    // Prop - reactive
     bodyScr += props.length
       ? `${sp}const { ${props.map(p => p.name).join(", ")} } = toRefs(props);\n`
       : "";

@@ -194,7 +194,7 @@ export function printSvEl(el, initialString) {
       printProperties(properties);
     const tag =
       type === "svelteMeta"
-        ? get(SVELTE_TAGS, `${tagName}.vueTag`, null)
+        ? get(SVELTE_TAGS, `${tagName}.vueTag`, tagName)
         : tagName;
     let elStr = "";
     if (tag) {
@@ -211,8 +211,8 @@ export function printSvEl(el, initialString) {
       // Wrap with parent element
       const parent = get(elPropParams, "parent");
       if (parent) {
-        const { tag, propertyString } = parent;
-        elStr = `<${tag}${propertyString}>${elStr}</${tag}>`;
+        const { tagName: parentTagName, propertyString } = parent;
+        elStr = `<${parentTagName}${propertyString}>${elStr}</${parentTagName}>`;
       }
 
       str += elStr;

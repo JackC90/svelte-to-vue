@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "parse": "node ./index.js",
-    "parse-local": "node ./index.js -s \"sample/source\" -t \"sample/target\"",
+    "parse-local": "node ./index.js -s \"sample/source\" -t \"sample/target\" -t \"sample/config.json\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

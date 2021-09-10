@@ -8,7 +8,9 @@ const __dirname = path.resolve();
 const setupYargOptions = () => {
   const args = process.argv;
   const yargOptions = yargs(args)
-    .usage("Usage: -s <location> -t <location>")
+    .usage(
+      "Usage: -s <source_location> -t <target_location> -c <configuration_location>"
+    )
     .option("s", {
       alias: "source",
       describe: "Source location",
@@ -30,13 +32,13 @@ const setupYargOptions = () => {
   return yargOptions;
 };
 
-export const parseFile = (fileName, sourceDir, targetDir, options) => {
+export const parseFile = (fileName, sourceDir, targetDir, config, options) => {
   const sourceFilePath = `${sourceDir}/${fileName}`;
   const isSvelteFile = !!fileName.match(/.svelte$/);
   if (isSvelteFile) {
     fs.readFile(sourceFilePath, "utf8", function (err, data) {
       if (err) throw err;
-      const result = parse({
+      const parseResult = parse({
         generatePositions: false,
         ...(options || null),
         value: data,
@@ -47,9 +49,9 @@ export const parseFile = (fileName, sourceDir, targetDir, options) => {
       const targetFilePath = `${targetDir}/${vFileName}`;
 
       // Content
-      const content = writeToVue(fn, result);
+      const content = writeToVue(fn, parseResult, config);
 
-      fs.outputFile(targetFilePath, content, (err) => {
+      fs.outputFile(targetFilePath, content, err => {
         if (err) throw err;
         console.log(`File saved to ${targetFilePath}`);
       });
@@ -80,11 +82,14 @@ function getAllFileNames(sourceDir, targetDir, arrayOfFiles) {
   return _arrayOfFiles;
 }
 
-function readDir(sourceDir, targetDir) {
+function readDir(sourceDir, targetDir, config) {
+  // Get all file names
   const fileNames = getAllFileNames(sourceDir, targetDir, []);
   console.log(`Processing ${fileNames.length} files...`);
+
+  // Parse files
   fileNames.forEach(function ({ fileName, sourceDir, targetDir }) {
-    parseFile(fileName, sourceDir, targetDir, {});
+    parseFile(fileName, sourceDir, targetDir, config, {});
   });
 }
 
@@ -92,6 +97,21 @@ export const processFiles = () => {
   const argv = setupYargOptions();
   const sourceDir = argv.s.replace(/\/$/g, "");
   const targetDir = argv.t.replace(/\/$/g, "");
+  const configPath = argv.c;
 
-  readDir(sourceDir, targetDir);
+  if (configPath) {
+    fs.readFile(configPath, "utf8", function (err, data) {
+      if (err) {
+        console.log("No config file found.");
+      }
+      try {
+        const config = JSON.parse(data);
+        readDir(sourceDir, targetDir, config);
+      } catch (e) {
+        readDir(sourceDir, targetDir, {});
+      }
+    });
+  } else {
+    readDir(sourceDir, targetDir, {});
+  }
 };

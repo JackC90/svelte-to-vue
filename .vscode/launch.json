@@ -18,7 +18,9 @@
         "-s",
         "sample/source",
         "-t",
-        "sample/target"
+        "sample/target",
+        "-c",
+        "sample/config.json"
       ]
     }
   ]
