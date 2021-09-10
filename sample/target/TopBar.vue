@@ -13,6 +13,7 @@
 
 </template>
 
+
 <script>
 import { defineComponent, ref, toRefs } from '@nuxtjs/composition-api';
 import get from "lodash.get";

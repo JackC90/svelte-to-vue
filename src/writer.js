@@ -8,14 +8,26 @@ export function writeToVue(name, schema) {
 
     // Scripts
     let scriptStr = "";
-    const scripts = children.find(child => {
+    const scripts = children.filter(child => {
       return (
         get(child, "type") === "svelteScript" &&
-        get(child, "tagName") === "script"
+        get(child, "tagName") === "script" &&
+        // Skip modules
+        !(
+          Array.isArray(child.properties) &&
+          child.properties.find(
+            prop =>
+              prop.name === "context" &&
+              Array.isArray(prop.value) &&
+              prop.value.find(val => val.value === "module")
+          )
+        )
       );
     });
-    const parsedScripts = parseScript(scripts);
-    scriptStr += printScript(parsedScripts);
+    scripts.forEach(script => {
+      const parsedScripts = parseScript(script);
+      scriptStr += `\n${printScript(parsedScripts)}\n`;
+    });
 
     const elements = children.filter(child => {
       return !(
