@@ -36,13 +36,14 @@ function cleanStr(value) {
 function printList(array, separator, isIncludeUndefined) {
   if (Array.isArray(array)) {
     const filterLmbd = isIncludeUndefined
-      ? (a) => a
-      : (a) => a && a !== "undefined";
+      ? a => a
+      : a => a && a !== "undefined";
     return array.filter(filterLmbd).join(separator || ", ");
   }
   return "";
 }
 
+// PARSE SCRIPT
 // Hooks
 export const HOOKS = {
   onMount: "onMounted",
@@ -55,6 +56,18 @@ const hookKeys = Object.keys(HOOKS);
 const hookVals = Object.values(HOOKS);
 const hookMatch = new RegExp(`^(${hookKeys.join("|")})`);
 
+const NUXT_PACKAGES = {
+  // Route - get route params, query
+  useRoute: {},
+
+  // Router - change url
+  useRouter: {},
+  useStore: {},
+  useMeta: {},
+  useContext: {},
+  useAsync: {},
+};
+
 export function parseImport(line) {
   if (typeof line === "string") {
     const lineTr = line.trim();
@@ -66,7 +79,7 @@ export function parseImport(line) {
     let isChild = false;
     let defaultVars = [];
     let vars = [];
-    varsParsed.split(",").forEach((c) => {
+    varsParsed.split(",").forEach(c => {
       if (c) {
         if (c.includes("{")) {
           isChild = true;
@@ -153,20 +166,21 @@ export function parseHook(line) {
 
 export function getDataType(value) {
   let dataType = null;
-  if (typeof value === "string") {
-    if (value.match(/^["']|["']$/)) {
+  const valClean = cleanStr(value);
+  if (typeof valClean === "string") {
+    if (valClean.match(/^["']|["']$/)) {
       dataType = "String";
-    } else if (value === "true" || value === "false") {
+    } else if (valClean === "true" || valClean === "false") {
       dataType = "Boolean";
-    } else if (!isNaN(value)) {
+    } else if (!isNaN(valClean)) {
       dataType = "Number";
-    } else if (value.match(/(\=\>)/) || value.match(/(function)/)) {
+    } else if (valClean.match(/(\=\>)/) || valClean.match(/(function)/)) {
       dataType = "Function";
-    } else if (value.match(/^\[(.*)\]$/)) {
+    } else if (valClean.match(/^\[((.|\n|\r)*)\]$/)) {
       dataType = "Array";
-    } else if (value.match(/^\{(.*)\}$/)) {
+    } else if (valClean.match(/^\{((.|\n|\r)*)\}$/)) {
       dataType = "Object";
-    } else if (value === "null") {
+    } else if (valClean === "null") {
     }
   }
   return dataType;
@@ -177,7 +191,7 @@ export function parseProp(line) {
     if (typeof line === "string") {
       const lineTr = line.trim();
       const sngLn = lineTr;
-      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*(.*)/);
+      let prms = sngLn.match(/^export let (.+)[ \n]*=[^>][ \n]*((.|\n|\r)*)/);
       // No default value
       if (!prms) {
         prms = sngLn.match(/^export let (.+)/);
@@ -212,7 +226,7 @@ export function parseWatch(line) {
         expression = get(prms, "[2]");
       } else {
         let exp = lineTr.replace(/^\$:[ \n]*/g, "");
-        if (exp.match(/^\{.*\}$/g)) {
+        if (exp.match(/^\{(.|\n|\r)*\}$/g)) {
           expression = `() => ${exp}`;
         } else if (checkBrackets(exp)) {
           expression = `() => {${exp}}`;
@@ -268,81 +282,81 @@ export function parseData(line) {
 const scriptBlockTypes = [
   {
     key: "import",
-    match: (content) => {
+    match: content => {
       return content.match(/^import/);
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !content.match(/;$/);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseImport(content);
       return params;
     },
   },
   {
     key: "prop",
-    match: (content) => {
+    match: content => {
       return content.match(/export let/);
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !checkBrackets(content);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseProp(content);
       return params;
     },
   },
   {
     key: "hook",
-    match: (content) => {
+    match: content => {
       return content.match(hookMatch);
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !checkBrackets(content);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseHook(content);
       return params;
     },
   },
   {
     key: "watch",
-    match: (content) => {
+    match: content => {
       return content.match(/^\$: */);
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !checkBrackets(content);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseWatch(content);
       return params;
     },
   },
   {
     key: "method",
-    match: (content) => {
+    match: content => {
       return (
         !content.match(/^\$: /) &&
         (content.match(/=>/) || content.match(/function/))
       );
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !parseFunction(content);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseFunction(content);
       return params;
     },
   },
   {
     key: "data",
-    match: (content) => {
+    match: content => {
       return content.match(/let /) || content.match(/const /);
     },
-    checkMultiline: (content) => {
+    checkMultiline: content => {
       return !checkBrackets(content);
     },
-    parse: (content) => {
+    parse: content => {
       let params = parseData(content);
       return params;
     },
@@ -359,7 +373,7 @@ export function parseScript(schema) {
     // Item types
     let blocks = [];
 
-    const cs = children.split("\n").filter((c) => c);
+    const cs = children.split("\n").filter(c => c);
     // Multi-line code
     let multiline = "";
     let mLType = null;
@@ -473,7 +487,7 @@ function getPropOpts(props) {
   let propOptsStr = "";
   if (Array.isArray(props)) {
     const propOpts = [];
-    props.forEach((prop) => {
+    props.forEach(prop => {
       const { dataType, defaultValue, name } = prop;
       const typeStr =
         dataType && dataType !== "undefined" ? `type: ${dataType}` : "";
@@ -522,22 +536,22 @@ const returnBlockTypes = ["prop", "data", "method", "computed"];
 function getReturnVals(blocks) {
   if (get(blocks, "length")) {
     const returnVals = blocks
-      .filter((bl) => {
+      .filter(bl => {
         return returnBlockTypes.includes(bl.block);
       })
-      .map((bl) => {
+      .map(bl => {
         const blTr = bl.name ? bl.name.trim() : "";
-        if (blTr.match(/^[\{\[].*[\]\}]$/g)) {
+        if (blTr.match(/^[\{\[](.|\n|\r)*[\]\}]$/g)) {
           const spread = (blTr.replace(/[\{\[\]\} \n]/g, "") || "")
             .split(",")
-            .filter((val) => val && val !== "null" && val !== "undefined")
-            .map((val) => val.trim())
+            .filter(val => val && val !== "null" && val !== "undefined")
+            .map(val => val.trim())
             .join(", ");
           return spread;
         }
         return blTr;
       })
-      .filter((val) => {
+      .filter(val => {
         return val && val !== "null" && val !== "undefined";
       })
       .join(", ");
@@ -560,7 +574,7 @@ export function printScript(parsed) {
     let props = [];
     let data = [];
 
-    parsed.forEach((p) => {
+    parsed.forEach(p => {
       if (p.block === "import") {
         imports.push(p);
       } else if (p.block === "prop") {
@@ -573,7 +587,7 @@ export function printScript(parsed) {
       }
     });
     // Imports components
-    imports.forEach((i) => {
+    imports.forEach(i => {
       scrStr += `${i.script.trim()}\n`;
     });
     const sp = "    ";
@@ -588,9 +602,7 @@ export function printScript(parsed) {
     let bodyScr = "";
 
     bodyScr += props.length
-      ? `${sp}const { ${props
-          .map((p) => p.name)
-          .join(", ")} } = toRefs(props);\n`
+      ? `${sp}const { ${props.map(p => p.name).join(", ")} } = toRefs(props);\n`
       : "";
     if (Array.isArray(otherScripts)) {
       // State changes (refs)
