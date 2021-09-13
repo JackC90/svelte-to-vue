@@ -51,6 +51,10 @@ export const HOOKS = {
   afterUpdate: "onUpdated",
   onDestroy: "onUnmounted",
 };
+export const VUE_COMP_API = {
+  computed: "computed",
+  watch: "watchEffect",
+};
 // Hooks
 const hookKeys = Object.keys(HOOKS);
 const hookVals = Object.values(HOOKS);
@@ -621,6 +625,15 @@ export function printScript(parsed, config) {
     scrStr += "\n<script>\n";
     // Import composition API
     const requiredFeatures = ["defineComponent", "ref", "toRefs"];
+    parsed.forEach(i => {
+      if (
+        (i.block === "computed" || i.block === "watch") &&
+        !requiredFeatures.includes(i.block)
+      ) {
+        const imp = get(VUE_COMP_API, i.block);
+        requiredFeatures.push(imp);
+      }
+    });
     // - Hooks
     parsed.forEach(p => {
       if (p.hookVal) {
