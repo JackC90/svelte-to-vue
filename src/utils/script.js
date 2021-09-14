@@ -36,8 +36,8 @@ function cleanStr(value) {
 function printList(array, separator, isIncludeUndefined) {
   if (Array.isArray(array)) {
     const filterLmbd = isIncludeUndefined
-      ? a => a
-      : a => a && a !== "undefined";
+      ? (a) => a
+      : (a) => a && a !== "undefined";
     return array.filter(filterLmbd).join(separator || ", ");
   }
   return "";
@@ -83,7 +83,7 @@ export function parseImport(line) {
     let isChild = false;
     let defaultVars = [];
     let vars = [];
-    varsParsed.split(",").forEach(c => {
+    varsParsed.split(",").forEach((c) => {
       if (c) {
         if (c.includes("{")) {
           isChild = true;
@@ -291,81 +291,81 @@ export function parseData(line) {
 const scriptBlockTypes = [
   {
     key: "import",
-    match: content => {
+    match: (content) => {
       return content.match(/^import/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !content.match(/;$/);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseImport(content);
       return params;
     },
   },
   {
     key: "prop",
-    match: content => {
+    match: (content) => {
       return content.match(/export let/);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseProp(content);
       return params;
     },
   },
   {
     key: "hook",
-    match: content => {
+    match: (content) => {
       return content.match(hookMatch);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseHook(content);
       return params;
     },
   },
   {
     key: "watch",
-    match: content => {
+    match: (content) => {
       return content.match(/^\$: */);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseWatch(content);
       return params;
     },
   },
   {
     key: "method",
-    match: content => {
+    match: (content) => {
       return (
         !content.match(/^\$: /) &&
         (content.match(/=>/) || content.match(/function/))
       );
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !parseFunction(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseFunction(content);
       return params;
     },
   },
   {
     key: "data",
-    match: content => {
+    match: (content) => {
       return content.match(/let /) || content.match(/const /);
     },
-    checkMultiline: content => {
+    checkMultiline: (content) => {
       return !checkBrackets(content);
     },
-    parse: content => {
+    parse: (content) => {
       let params = parseData(content);
       return params;
     },
@@ -382,7 +382,7 @@ export function parseScript(schema) {
     // Item types
     let blocks = [];
 
-    const cs = children.split("\n").filter(c => c);
+    const cs = children.split("\n").filter((c) => c);
     // Multi-line code
     let multiline = "";
     let mLType = null;
@@ -501,12 +501,12 @@ function getContextVars(imports, config) {
     const aliasKeys = (aliases && Object.keys(aliases)) || [];
     const pluginsConf = get(config, "plugins");
 
-    imports.forEach(imp => {
+    imports.forEach((imp) => {
       const { type, category, script, defaultVars, vars, lib, path } = imp;
       if (type === "library") {
         if (category === "@utils") {
           // Plugins
-          const conf = pluginsConf.find(pc => pc.svelte === lib);
+          const conf = pluginsConf.find((pc) => pc.svelte === lib);
           plugins.push({
             name: get(conf, "vue", lib),
             vars: get(conf, "vars", vars),
@@ -524,11 +524,15 @@ function getContextVars(imports, config) {
       } else if (type === "svelteComponent") {
         // Svelte Components - replace with vue
         let vScript = path;
-        aliasKeys.forEach(aliasKey => {
+        aliasKeys.forEach((aliasKey) => {
           const alias = aliases[aliasKey];
           vScript = vScript.replace(aliasKey, alias);
         });
-        vScript = vScript.replace(/\.svelte/g, ".vue");
+        const vScrSplit = typeof vScript === "string" ? vScript.split("/") : [];
+        const fileName = get(vScrSplit, `[${vScrSplit.length - 1}]`, "");
+        const compName = fileName.replace(/\.svelte/g, "");
+        const filePath = vScrSplit.slice(0, -1).join("/");
+        vScript = `${filePath}/${compName}/${compName}.vue`;
         components.push({
           defaultVars,
           vars,
@@ -545,7 +549,7 @@ function getPropOpts(props) {
   let propOptsStr = "";
   if (Array.isArray(props)) {
     const propOpts = [];
-    props.forEach(prop => {
+    props.forEach((prop) => {
       const { dataType, defaultValue, name } = prop;
       const typeStr =
         dataType && dataType !== "undefined" ? `type: ${dataType}` : "";
@@ -591,25 +595,49 @@ function getWatch(blockParams, states) {
 
 const returnBlockTypes = ["prop", "data", "method", "computed"];
 
+function getComponentVals(vueComps) {
+  let impStr = "";
+  let optStr = "";
+  if (Array.isArray(vueComps)) {
+    const opts = [];
+    vueComps.forEach((i) => {
+      const defaults = i.defaultVars.join(", ");
+      if (defaults) {
+        opts.push(defaults);
+      }
+      const items = [defaults];
+      if (i.vars && i.vars.length) {
+        items.push(`{ ${i.vars.join(", ")} }`);
+      }
+      impStr += `import ${items.join(", ")} from "${i.path}";\n`;
+    });
+    optStr = opts.length ? `components: { ${opts.join(", ")} }` : "";
+  }
+  return {
+    imports: impStr,
+    options: optStr,
+  };
+}
+
 function getReturnVals(blocks) {
   if (get(blocks, "length")) {
     const returnVals = blocks
-      .filter(bl => {
+      .filter((bl) => {
         return returnBlockTypes.includes(bl.block);
       })
-      .map(bl => {
+      .map((bl) => {
         const blTr = bl.name ? bl.name.trim() : "";
         if (blTr.match(/^[\{\[](.|\n|\r)*[\]\}]$/g)) {
           const spread = (blTr.replace(/[\{\[\]\} \n]/g, "") || "")
             .split(",")
-            .filter(val => val && val !== "null" && val !== "undefined")
-            .map(val => val.trim())
+            .filter((val) => val && val !== "null" && val !== "undefined")
+            .map((val) => val.trim())
             .join(", ");
           return spread;
         }
         return blTr;
       })
-      .filter(val => {
+      .filter((val) => {
         return val && val !== "null" && val !== "undefined";
       })
       .join(", ");
@@ -618,14 +646,14 @@ function getReturnVals(blocks) {
   return "return {}";
 }
 
-export function printScript(parsed, config) {
+export function printScript(parsed, componentName, config) {
   let scrStr = "";
   if (Array.isArray(parsed)) {
     // Script tags
     scrStr += "\n<script>\n";
     // Import composition API
     const requiredFeatures = ["defineComponent", "ref", "toRefs"];
-    parsed.forEach(i => {
+    parsed.forEach((i) => {
       if (
         (i.block === "computed" || i.block === "watch") &&
         !requiredFeatures.includes(i.block)
@@ -635,7 +663,7 @@ export function printScript(parsed, config) {
       }
     });
     // - Hooks
-    parsed.forEach(p => {
+    parsed.forEach((p) => {
       if (p.hookVal) {
         requiredFeatures.push(p.hookVal);
       } else if (
@@ -660,7 +688,7 @@ export function printScript(parsed, config) {
     let props = [];
     let data = [];
 
-    parsed.forEach(p => {
+    parsed.forEach((p) => {
       if (p.block === "import") {
         imports.push(p);
       } else if (p.block === "prop") {
@@ -679,18 +707,18 @@ export function printScript(parsed, config) {
       components: vueComps,
       stores: vueStores,
     } = getContextVars(imports, config);
-    vueComps.forEach(i => {
-      const items = [i.defaultVars.join(", ")];
-      if (i.vars && i.vars.length) {
-        items.push(`{ ${i.vars.join(", ")} }`);
-      }
-      scrStr += `import ${items.join(", ")} from "${i.path}";\n`;
-    });
+    const { imports: compImports, options: compOpts } =
+      getComponentVals(vueComps);
+    scrStr += compImports;
 
     // Indent
     const sp = "    ";
     // Vue ----- Start
     scrStr += `\nexport default defineComponent({\n`;
+    // Name
+    scrStr += `${sp}name: "${componentName}",\n`;
+    // Components
+    scrStr += compOpts ? `${sp}${compOpts},\n` : "";
     // Props
     scrStr += `${sp}${getPropOpts(props)},`;
 
@@ -702,11 +730,11 @@ export function printScript(parsed, config) {
     // Context - plugins
     bodyScr += vuePlugins.length
       ? `\nconst { ${vuePlugins
-          .map(p => p.name)
+          .map((p) => p.name)
           .join(", ")} } = useContext();\n`
       : "";
     let plScr = "";
-    vuePlugins.forEach(pl => {
+    vuePlugins.forEach((pl) => {
       plScr +=
         pl.vars && pl.vars.length
           ? `${sp}const { ${pl.vars.join(", ")} } = ${pl.name};\n`
@@ -716,7 +744,9 @@ export function printScript(parsed, config) {
 
     // Prop - reactive
     bodyScr += props.length
-      ? `${sp}const { ${props.map(p => p.name).join(", ")} } = toRefs(props);\n`
+      ? `${sp}const { ${props
+          .map((p) => p.name)
+          .join(", ")} } = toRefs(props);\n`
       : "";
     if (Array.isArray(otherScripts)) {
       // State changes (refs)

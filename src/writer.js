@@ -8,7 +8,7 @@ export function writeToVue(name, schema, config) {
 
     // Scripts
     let scriptStr = "";
-    const scripts = children.filter(child => {
+    const scripts = children.filter((child) => {
       return (
         get(child, "type") === "svelteScript" &&
         get(child, "tagName") === "script" &&
@@ -16,20 +16,20 @@ export function writeToVue(name, schema, config) {
         !(
           Array.isArray(child.properties) &&
           child.properties.find(
-            prop =>
+            (prop) =>
               prop.name === "context" &&
               Array.isArray(prop.value) &&
-              prop.value.find(val => val.value === "module")
+              prop.value.find((val) => val.value === "module")
           )
         )
       );
     });
-    scripts.forEach(script => {
+    scripts.forEach((script) => {
       const parsedScripts = parseScript(script);
-      scriptStr += `\n${printScript(parsedScripts, config)}\n`;
+      scriptStr += `\n${printScript(parsedScripts, name, config)}\n`;
     });
 
-    const elements = children.filter(child => {
+    const elements = children.filter((child) => {
       return !(
         get(child, "type") === "svelteScript" ||
         get(child, "tagName") === "script"
