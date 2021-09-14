@@ -656,7 +656,7 @@ export function printScript(parsed, componentName, config) {
     parsed.forEach((i) => {
       if (
         (i.block === "computed" || i.block === "watch") &&
-        !requiredFeatures.includes(i.block)
+        !requiredFeatures.includes(get(VUE_COMP_API, i.block))
       ) {
         const imp = get(VUE_COMP_API, i.block);
         requiredFeatures.push(imp);
