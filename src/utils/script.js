@@ -196,21 +196,24 @@ export function parseProp(line) {
   try {
     if (typeof line === "string") {
       const lineTr = line.trim();
-      const sngLn = lineTr;
-      let prms = sngLn.match(/^export let (.+)[ \n]+=[^>][ \n]*((.|\n|\r)*)/);
-      // No default value
-      if (!prms) {
-        prms = sngLn.match(/^export let (.+)/);
+      if (!lineTr.match(/^\/\//)) {
+        const sngLn = lineTr;
+        let prms = sngLn.match(/^export let (.+)[ \n]+=[^>][ \n]*((.|\n|\r)*)/);
+        // No default value
+        if (!prms) {
+          prms = sngLn.match(/^export let (.+)/);
+        }
+        const name = get(prms, "[1]");
+        const defaultValue = get(prms, "[2]");
+        return {
+          block: "prop",
+          name: cleanStr(name),
+          defaultValue: cleanStr(defaultValue),
+          dataType: getDataType(defaultValue),
+          script: line,
+        };
       }
-      const name = get(prms, "[1]");
-      const defaultValue = get(prms, "[2]");
-      return {
-        block: "prop",
-        name: cleanStr(name),
-        defaultValue: cleanStr(defaultValue),
-        dataType: getDataType(defaultValue),
-        script: line,
-      };
+      return null;
     }
   } catch (e) {
     return null;
@@ -557,7 +560,14 @@ function getPropOpts(props) {
         defaultValue && defaultValue !== "undefined"
           ? `default: ${defaultValue}`
           : "";
-      propOpts.push(`${name}: { ${printList([typeStr, defaultStr])} }`);
+      const prList = [];
+      if (typeStr) {
+        prList.push(typeStr);
+      }
+      if (defaultStr) {
+        prList.push(defaultStr);
+      }
+      propOpts.push(`${name}: { ${printList(prList)} }`);
     });
     propOptsStr = `props: {\n${printList(propOpts, ",\n")}\n}`;
     return propOptsStr;
@@ -600,12 +610,13 @@ function getComponentVals(vueComps) {
   let optStr = "";
   if (Array.isArray(vueComps)) {
     const opts = [];
+    let defaults;
     vueComps.forEach((i) => {
-      const defaults = i.defaultVars.join(", ");
+      defaults = i.defaultVars.join(", ");
       if (defaults) {
         opts.push(defaults);
       }
-      const items = [defaults];
+      const items = defaults ? [defaults] : [];
       if (i.vars && i.vars.length) {
         items.push(`{ ${i.vars.join(", ")} }`);
       }
