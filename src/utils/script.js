@@ -739,19 +739,19 @@ export function printScript(parsed, componentName, config) {
     let bodyScr = "";
 
     // Context - plugins
-    bodyScr += vuePlugins.length
-      ? `\nconst { ${vuePlugins
-          .map((p) => p.name)
-          .join(", ")} } = useContext();\n`
-      : "";
-    let plScr = "";
-    vuePlugins.forEach((pl) => {
-      plScr +=
-        pl.vars && pl.vars.length
-          ? `${sp}const { ${pl.vars.join(", ")} } = ${pl.name};\n`
-          : "";
-    });
-    bodyScr += plScr;
+    if (vuePlugins.length) {
+      bodyScr += `\nconst {\n${vuePlugins
+        .map((p) => {
+          let plScr = "";
+          plScr += ` ${p.name}`;
+          if (p.vars && p.vars.length) {
+            plScr += `: { ${p.vars.join(", ")} }`;
+          }
+          return plScr;
+        })
+        .filter((p) => p)
+        .join(",\n")}\n} = useContext();\n`;
+    }
 
     // Prop - reactive
     bodyScr += props.length
