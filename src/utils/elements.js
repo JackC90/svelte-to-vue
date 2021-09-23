@@ -204,6 +204,13 @@ export function printSvEl(el, initialString) {
     if (tag) {
       elStr += `<${tag}`;
       elStr += elPropContent;
+
+      if (type === "svelteComponent") {
+        const parentPropertyString =
+          get(elPropParams, "parent.propertyString") || "";
+        elStr += ` ${parentPropertyString} `;
+      }
+
       elStr += selfClosing ? ` />` : `>`;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -212,9 +219,9 @@ export function printSvEl(el, initialString) {
       if (!selfClosing) {
         elStr += `</${tag}>`;
       }
-      // Wrap with parent element
+      // Wrap with parent element for slots
       const parent = get(elPropParams, "parent");
-      if (parent) {
+      if (parent && type !== "svelteComponent") {
         const { tagName: parentTagName, propertyString } = parent;
         elStr = `<${parentTagName}${propertyString}>${elStr}</${parentTagName}>`;
       }
