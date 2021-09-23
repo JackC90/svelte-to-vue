@@ -45,8 +45,8 @@ export const parseFile = (fileName, sourceDir, targetDir, config, options) => {
       });
 
       const fn = fileName.split(".svelte")[0];
-      const vFileName = `${fn}/index.vue`;
-      const targetFilePath = `${targetDir}/${vFileName}`;
+      const vFileName = `${fn}.vue`;
+      const targetFilePath = `${targetDir}/${fn}/${vFileName}`;
 
       // Content
       const content = writeToVue(fn, parseResult, config);
