@@ -11,7 +11,7 @@
       "svelte": "svelte-i18n",
       "vue": "$i18n",
       "vars": {
-        "$_": "t"
+        "$_": "$t"
       }
     },
     {

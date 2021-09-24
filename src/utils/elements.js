@@ -1,4 +1,5 @@
 import get from "lodash.get";
+import { replaceExpVars } from "./common.js";
 
 const SVELTE_TAGS = {
   fragment: {
@@ -15,9 +16,10 @@ const IF_BLOCKS = {
   else: "else",
 };
 const ifBlockNames = Object.keys(IF_BLOCKS);
+const SKIP_PROPS = ["fade", "slide", "in", "fly"];
 
 // Elements
-function printProperties(properties) {
+function printProperties(properties, config) {
   let str = "";
 
   // Parameters for creating parent, e.g. wrapper <template>
@@ -32,15 +34,15 @@ function printProperties(properties) {
       const { type, name, value, specifier, shorthand } = property;
 
       if (types.includes(type)) {
-        if (name) {
+        if (name && !SKIP_PROPS.includes(specifier)) {
           // Name
           let varName = "";
           const isDynamic = !!(
-            Array.isArray(value) && value.find(v => v.expression)
+            Array.isArray(value) && value.find((v) => v.expression)
           );
           const isInterpolatedText =
             isDynamic &&
-            !!(Array.isArray(value) && value.find(v => v.type === "text"));
+            !!(Array.isArray(value) && value.find((v) => v.type === "text"));
           if (type === "svelteDirective") {
             if (name === "on") {
               varName += `@${specifier}`;
@@ -50,10 +52,12 @@ function printProperties(properties) {
               // Slot params
               slotVars.push(specifier);
             } else if (
-              ifBlockNames.find(ifblN => `v-${IF_BLOCKS[ifblN]}` === name)
+              // Handle if blocks - e.g. if, else if, else
+              ifBlockNames.find((ifblN) => `v-${IF_BLOCKS[ifblN]}` === name)
             ) {
               varName += `${name}`;
             } else {
+              // Other props
               varName += `:${specifier}`;
             }
           } else if (shorthand === "expression" && name.match(/^\.\.\.(.+)$/)) {
@@ -71,8 +75,9 @@ function printProperties(properties) {
           }
           // Value
           let valStr = "";
+          // For all properties, except slots
           if (name !== "slot") {
-            // Iterate each value
+            // Iterate each property value
             value.forEach(({ type, value, expression }) => {
               if (type === "text") {
                 valStr += value;
@@ -85,13 +90,16 @@ function printProperties(properties) {
                   const destruct = get(matches, "[1]");
                   val = destruct ? destruct : val;
                 }
+                // Deal with interpolated text expressions,
+                // e.g. class="`text-lg ${color}`"
                 val = isInterpolatedText ? `\$\{${val}\}` : val;
                 valStr += val;
               }
             });
             valStr = isInterpolatedText ? `\`${valStr}\`` : valStr;
             if (varName || valStr) {
-              str += valStr ? ` ${varName}="${valStr}"` : ` ${varName}`;
+              const repValStr = replaceExpVars(valStr, config);
+              str += valStr ? ` ${varName}="${repValStr}"` : ` ${varName}`;
             }
           }
         }
@@ -110,7 +118,7 @@ function printProperties(properties) {
   return { content: str, params };
 }
 
-const parseEachExp = eachExp => {
+const parseEachExp = (eachExp) => {
   if (typeof eachExp === "string") {
     let key;
     let exp = "";
@@ -121,7 +129,7 @@ const parseEachExp = eachExp => {
     if (!item) {
       return null;
     }
-    item.split(/[, ]/).forEach(w => {
+    item.split(/[, ]/).forEach((w) => {
       const wt = w.trim();
       if (wt) {
         // Value in brackets are keys
@@ -169,7 +177,7 @@ function generateForKey(key, place) {
 
 const empty = [];
 
-export function printSvEl(el, initialString) {
+export function printSvEl(el, initialString, config) {
   let initString = initialString || "";
   let str = initString ? initString : "";
   const {
@@ -194,8 +202,10 @@ export function printSvEl(el, initialString) {
     type === "svelteComponent" ||
     type === "svelteMeta"
   ) {
-    const { params: elPropParams, content: elPropContent } =
-      printProperties(properties);
+    const { params: elPropParams, content: elPropContent } = printProperties(
+      properties,
+      config
+    );
     const tag =
       type === "svelteMeta"
         ? get(SVELTE_TAGS, `${tagName}.vueTag`, tagName)
@@ -214,7 +224,7 @@ export function printSvEl(el, initialString) {
       elStr += selfClosing ? ` />` : `>`;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        elStr += printSvEl(child);
+        elStr += printSvEl(child, null, config);
       }
       if (!selfClosing) {
         elStr += `</${tag}>`;
@@ -241,7 +251,7 @@ export function printSvEl(el, initialString) {
           } = branch;
           const elNum = get(
             brChildren.filter(
-              ch =>
+              (ch) =>
                 ch.type === "svelteElement" ||
                 ch.type === "svelteComponent" ||
                 ch.type === "svelteBranchingBlock"
@@ -255,7 +265,7 @@ export function printSvEl(el, initialString) {
           let ifBlStr = "";
           // Get each children
           if (get(brChildren, "length")) {
-            brChildren.forEach(ch => {
+            brChildren.forEach((ch) => {
               const vIfParams = isSingleEl
                 ? {
                     type: "svelteDirective",
@@ -280,7 +290,7 @@ export function printSvEl(el, initialString) {
               if (isSingleEl) {
                 ch.properties.push(vIfParams);
               }
-              ifBlStr += printSvEl(ch);
+              ifBlStr += printSvEl(ch, null, config);
             });
           }
 
@@ -301,7 +311,7 @@ export function printSvEl(el, initialString) {
           const exp = parseEachExp(get(brExpression, "value"));
           const elNum = get(
             brChildren.filter(
-              ch =>
+              (ch) =>
                 ch.type === "svelteElement" ||
                 ch.type === "svelteComponent" ||
                 ch.type === "svelteBranchingBlock"
@@ -321,7 +331,7 @@ export function printSvEl(el, initialString) {
                 (ch.type === "svelteElement" ||
                   ch.type === "svelteComponent") &&
                 !ch.selfClosing &&
-                !get(ch, "properties", empty).find(pr => pr.name === "key")
+                !get(ch, "properties", empty).find((pr) => pr.name === "key")
               ) {
                 const key = {
                   type: "svelteProperty",
@@ -368,7 +378,7 @@ export function printSvEl(el, initialString) {
                 ch.properties.push(key);
                 svelteCmpCount += 1;
               }
-              blockStr += printSvEl(ch, null, {
+              blockStr += printSvEl(ch, null, config, {
                 tagInner: [""],
               });
             }

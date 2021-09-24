@@ -1,4 +1,5 @@
 import get from "lodash.get";
+import { replaceExpVars } from "./common.js";
 
 export function checkBrackets(expr) {
   const holder = [];
@@ -454,10 +455,11 @@ export function parseScript(schema) {
   return null;
 }
 
-function replaceStates(content, states) {
+function replaceStates(content, states, config) {
   if (content && typeof content === "string") {
     let newStr = content;
     const keys = Object.keys(states);
+    // Replace states / props
     for (let i = 0; i < keys.length; i++) {
       const stateKey = keys[i];
       const stateParams = states[stateKey];
@@ -465,10 +467,10 @@ function replaceStates(content, states) {
         const { block, name, dataType } = stateParams[j];
         if (block === "prop" || block === "data") {
           const reg = new RegExp(`(?<![\.\"\'\`])\\b${name}\\b`, "g");
-          newStr = newStr.replace(reg, `${name}.value`);
+          const nmVal = block === "prop" ? `props.${name}` : `${name}.value`;
+          newStr = newStr.replace(reg, nmVal);
 
           // Replace shorthand property assignment
-          const nmVal = `${name}.value`;
           // Object property assignment
           const clReg = new RegExp(
             `((\\b(${nmVal})(?=:))|((?<=((const|let|var) +))\\b(${nmVal})))`,
@@ -480,7 +482,10 @@ function replaceStates(content, states) {
             `((?<=([\{,][\\n\\r\\s]*))(${nmVal})(?=([\\n\\r\\s]*[\},])))`,
             "g"
           );
-          newStr = newStr.replace(shReg, `${name}: ${name}.value`);
+          if (name) {
+            newStr = newStr.replace(shReg, `${name}: ${nmVal}`);
+          }
+
           // Argument assignment
           const argReg = new RegExp(
             `((?<=(function\(.*))(${nmVal})(?=(.*\)))|((${nmVal})(?=(.*(\=\>)))))`,
@@ -490,6 +495,9 @@ function replaceStates(content, states) {
         }
       }
     }
+
+    // Replace plugin vars
+    newStr = replaceExpVars(newStr, config);
     return newStr;
   }
   return "";
@@ -523,6 +531,7 @@ function getContextVars(imports, config) {
             vars,
             category,
           });
+        } else {
         }
       } else if (type === "svelteComponent") {
         // Svelte Components - replace with vue
@@ -575,15 +584,15 @@ function getPropOpts(props) {
   return propOptsStr;
 }
 
-function getFunction(blockParams, states) {
+function getFunction(blockParams, states, config) {
   if (blockParams) {
     const { block, hookKey, hookVal, script, name, def } = blockParams;
     if (block === "hook") {
       let str = script.replace(hookKey, hookVal);
-      str = replaceStates(str, states);
+      str = replaceStates(str, states, config);
       return str;
     } else {
-      let str = replaceStates(script, states);
+      let str = replaceStates(script, states, config);
       return str;
     }
   }
@@ -603,7 +612,7 @@ function getWatch(blockParams, states) {
   return "";
 }
 
-const returnBlockTypes = ["prop", "data", "method", "computed"];
+const returnBlockTypes = ["data", "method", "computed"];
 
 function getComponentVals(vueComps) {
   let impStr = "";
@@ -753,12 +762,6 @@ export function printScript(parsed, componentName, config) {
         .join(",\n")}\n} = useContext();\n`;
     }
 
-    // Prop - reactive
-    bodyScr += props.length
-      ? `${sp}const { ${props
-          .map((p) => p.name)
-          .join(", ")} } = toRefs(props);\n`
-      : "";
     if (Array.isArray(otherScripts)) {
       // State changes (refs)
       const states = { props, data };
@@ -778,7 +781,7 @@ export function printScript(parsed, componentName, config) {
               : ""
           };\n`;
         } else if (el.block === "method" || el.block === "hook") {
-          bodyScr += `\n${sp}${getFunction(el, states)}\n`;
+          bodyScr += `\n${sp}${getFunction(el, states, config)}\n`;
         } else if (el.block === "computed" || el.block === "watch") {
           bodyScr += `\n${sp}${getWatch(el, states)}\n`;
         }

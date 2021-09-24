@@ -41,7 +41,7 @@ export function writeToVue(name, schema, config) {
       let str = "<template>\n";
       for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
-        str += printSvEl(el);
+        str += printSvEl(el, null, config);
       }
       str += "\n</template>";
       templateStr = str;
