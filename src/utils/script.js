@@ -77,7 +77,7 @@ export function parseImport(line) {
   if (typeof line === "string") {
     const lineTr = line.trim();
     const type = lineTr.includes(".svelte") ? "svelteComponent" : "library";
-    const sngLn = lineTr.replace("\n", "");
+    const sngLn = lineTr.replace(/\n/g, " ");
     const mtc = sngLn.match(/^import (.+) from/);
     let varsParsed = get(mtc, "[1]", "");
 
@@ -226,7 +226,7 @@ export function parseWatch(line) {
     if (typeof line === "string") {
       const lineTr = line.trim();
       const sngLn = lineTr;
-      const isComp = !!lineTr.match(/\$: (.+)[ \n]+=/);
+      let isComp = !!lineTr.match(/\$: (.+)[ \n]+=/);
       let prms;
       let name;
       let expression;
@@ -234,8 +234,16 @@ export function parseWatch(line) {
         prms = sngLn.match(/^\$: (.+)[ \n]+=[ \n]+((.|\n|\r)*)/);
         name = get(prms, "[1]");
         expression = get(prms, "[2]");
-        if (!(expression.match(/\=\>/) || expression.match(/function/))) {
-          expression = `() => ${expression}`;
+        if (
+          !(
+            expression &&
+            (expression.match(/\=\>/) || expression.match(/function/))
+          )
+        ) {
+          if (!expression && lineTr) {
+            expression = lineTr.replace(/^\$:/, "").trim();
+          }
+          expression = `() => { ${expression} }`;
         }
       } else {
         let exp = lineTr.replace(/^\$:[ \n]+/g, "");
@@ -244,6 +252,10 @@ export function parseWatch(line) {
         } else if (checkBrackets(exp)) {
           expression = `() => {${exp}}`;
         }
+      }
+
+      if (!name) {
+        isComp = false;
       }
 
       return {
@@ -291,6 +303,19 @@ export function parseData(line) {
     return null;
   }
 }
+
+const multiLineGenericConstraints = (line) => {
+  if (line) {
+    const singleLine = line.replace(/\n/g, " ");
+    const lineTrimmed = singleLine.trim();
+    // Cannot end with these characters
+    if (lineTrimmed.match(/[=\.,\{\(\[\*:><]$/)) {
+      return false;
+    }
+    return true;
+  }
+  return true;
+};
 
 const scriptBlockTypes = [
   {
@@ -428,9 +453,12 @@ export function parseScript(schema) {
         if (mLType === key || match(cTr)) {
           // Multi-line
           // - Set multi-line
-          if (checkMultiline(multiline || c)) {
+          if (
+            !multiLineGenericConstraints(multiline || c) ||
+            checkMultiline(multiline || c)
+          ) {
             startLine(key, c);
-          } else {
+          } else if (multiLineGenericConstraints(multiline || c)) {
             // - End line
             endLine();
           }
@@ -517,10 +545,11 @@ function getContextVars(imports, config) {
       if (type === "library") {
         if (category === "@utils") {
           // Plugins
-          const conf = pluginsConf.find((pc) => pc.svelte === lib);
+          const config = pluginsConf.find((pc) => pc.svelte === lib);
           plugins.push({
-            name: get(conf, "vue", lib),
-            vars: get(conf, "vars", vars),
+            name: get(config, "vue", lib),
+            defaultVars: get(config, "defaultVars", defaultVars),
+            vars: get(config, "vars", vars),
             category,
             feature: "plugin",
           });
@@ -639,6 +668,39 @@ function getComponentVals(vueComps) {
   };
 }
 
+function getPluginVals(plugins) {
+  let impStr = "";
+  let optStr = "";
+  if (Array.isArray(plugins)) {
+    const opts = [];
+    let defaults;
+    plugins.forEach((i) => {
+      const path = `${i.category === "@utils" ? "@/plugins" : i.category}/${
+        i.name
+      }`;
+      const defVarsClean = i.defaultVars.map((v) => v.trim()).filter((v) => v);
+      const varsClean = i.vars.map((v) => v.trim()).filter((v) => v);
+      defaults = defVarsClean.join(", ");
+      if (defaults) {
+        opts.push(defaults);
+      }
+      const items = defaults ? [defaults] : [];
+      if (varsClean && varsClean.length) {
+        items.push(`{ ${varsClean.join(", ")} }`);
+      }
+      impStr += `import ${items
+        .map((v) => v.trim())
+        .filter((v) => v)
+        .join(", ")} from "${path}";\n`;
+    });
+    optStr = opts.length ? `${opts.join(", ")}` : "";
+  }
+  return {
+    imports: impStr,
+    options: optStr,
+  };
+}
+
 function getReturnVals(blocks) {
   if (get(blocks, "length")) {
     const returnVals = blocks
@@ -729,7 +791,9 @@ export function printScript(parsed, componentName, config) {
     } = getContextVars(imports, config);
     const { imports: compImports, options: compOpts } =
       getComponentVals(vueComps);
-    scrStr += compImports;
+    const { imports: pluginImports, options: pluginOpts } =
+      getPluginVals(vuePlugins);
+    scrStr += `\n${pluginImports}\n`;
 
     // Indent
     const sp = "    ";
@@ -748,19 +812,19 @@ export function printScript(parsed, componentName, config) {
     let bodyScr = "";
 
     // Context - plugins
-    if (vuePlugins.length) {
-      bodyScr += `\nconst {\n${vuePlugins
-        .map((p) => {
-          let plScr = "";
-          plScr += ` ${p.name}`;
-          if (p.vars && p.vars.length) {
-            plScr += `: { ${p.vars.join(", ")} }`;
-          }
-          return plScr;
-        })
-        .filter((p) => p)
-        .join(",\n")}\n} = useContext();\n`;
-    }
+    // if (vuePlugins.length) {
+    //   bodyScr += `\nconst {\n${vuePlugins
+    //     .map((p) => {
+    //       let plScr = "";
+    //       plScr += ` ${p.name}`;
+    //       if (p.vars && p.vars.length) {
+    //         plScr += `: { ${p.vars.join(", ")} }`;
+    //       }
+    //       return plScr;
+    //     })
+    //     .filter((p) => p)
+    //     .join(",\n")}\n} = useContext();\n`;
+    // }
 
     if (Array.isArray(otherScripts)) {
       // State changes (refs)

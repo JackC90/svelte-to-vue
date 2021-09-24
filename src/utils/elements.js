@@ -108,7 +108,10 @@ function printProperties(properties, config) {
     // Handle slots
     if (slotVars.length) {
       const sn = slotName ? slotName : "default";
-      const propertyString = ` #${sn}="{ ${slotVars.join(", ")} }"`;
+      const propertyString = ` #${sn}="{ ${slotVars
+        .map((v) => v.trim())
+        .filter((v) => v)
+        .join(", ")} }"`;
       params.parent = {
         tagName: "template",
         propertyString,
@@ -152,7 +155,13 @@ const parseEachExp = (eachExp) => {
       index = get(item.match(/(?<=(.+, *))(\b.+\b)(?=(( *\()|$))/g), "[0]");
     }
 
-    const varsStr = vars.length > 1 ? `(${vars.join(", ")})` : get(vars, "[0]");
+    const varsStr =
+      vars.length > 1
+        ? `(${vars
+            .map((v) => v.trim())
+            .filter((v) => v)
+            .join(", ")})`
+        : get(vars, "[0]");
     exp = `${varsStr} in ${collection}`;
     return {
       exp,
