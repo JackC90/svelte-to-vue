@@ -1,6 +1,6 @@
 import get from "lodash.get";
-import { printSvEl } from "./utils/elements.js";
-import { parseScript, printScript } from "./utils/script.js";
+import { printSvEl } from "./elements.js";
+import { parseScript, printScript } from "./script.js";
 
 export function writeToVue(name, schema, config) {
   if (get(schema, "type") === "root") {

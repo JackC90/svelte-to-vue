@@ -1,3 +1,4 @@
-import { processFiles } from "./src/parser.js";
+import { SvelteFileHandler } from "./src/svelteFileHandler.js";
 
-processFiles();
+const fileHandler = new SvelteFileHandler();
+fileHandler.processFiles();
